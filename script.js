@@ -1,0 +1,902 @@
+// From tutorial at: https://www.youtube.com/watch?v=jl29qI62XPg
+//    Also see: https://opengameart.org/ and https://gamedeveloperstudio.com
+
+//TODO: Move score keeping into ECS
+//TODO: Draw score in ECS
+
+const pixelsPerFrameKeyboardVelocity = 5;
+const playerFireCooldownWait = 35;
+const playerSpawnInvulnerabilityTime = 200;
+const enemyFireCooldownWait = 200;
+
+
+// Canvas setup
+const canvas = document.getElementById('canvas1');
+const ctx = canvas.getContext('2d');
+canvas.width = 800;
+canvas.height = 1600;
+
+// Helpers
+function drawCircle(x, y, radius, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+function createImage(source) {
+    const image = new Image();
+    image.src = source;
+    return image;
+}
+
+const inputKeys = {
+    w: false,
+    a: false,
+    s: false,
+    d: false,
+    space: false,
+}
+
+canvas.addEventListener('keydown', event => {
+    switch(event.key) {
+        case 'a':
+        case 'A':
+            inputKeys.a = true;
+            break;
+        case 'd':
+        case 'D':
+            inputKeys.d = true;
+            break;
+        case 's':
+        case 'S':
+            inputKeys.s = true;
+            break;
+        case 'w':
+        case 'W':
+            inputKeys.w = true;
+            break;
+        case ' ':
+            inputKeys.space = true;
+            break;
+    }
+});
+
+canvas.addEventListener('keyup', event => {
+    switch(event.key) {
+        case 'a':
+        case 'A':
+            inputKeys.a = false;
+            break;
+        case 'd':
+        case 'D':
+            inputKeys.d = false;
+            break;
+        case 's':
+        case 'S':
+            inputKeys.s = false;
+            break;
+        case 'w':
+        case 'W':
+            inputKeys.w = false;
+            break;
+        case ' ':
+            inputKeys.space = false;
+            break;
+    }
+});
+
+
+// ECS
+class Component {
+    constructor(entityId) {
+        this.entityId = entityId;
+    }
+
+    className() {
+        return this.constructor.name;
+    }
+}
+
+class ComponentManager {
+    constructor() {
+        this.componentEntries = new Map();
+        this.nextId = 0;
+    }
+
+    createEntity() {
+        return this.nextId++;
+    }
+
+    // Returns tuples for each entity with all requested components (arguments should be the name of the components requested)
+    getView() {
+        let resultMap = new Map();
+        for (const argument of arguments) {
+            let componentArray = this.componentEntries.get(argument);
+            if (componentArray) {
+                for (let component of componentArray) {
+                    if (resultMap.has(component.entityId)) {
+                        resultMap.get(component.entityId).push(component);
+                    } else {
+                        resultMap.set(component.entityId, [component]);
+                    }
+                }
+            }
+        }
+
+        let result = [];
+        for (const [key, val] of resultMap.entries()) {
+            if (val.length == arguments.length) {
+                result.push(val);
+            }
+        }
+        return result;
+    }
+
+    // Returns a map of component name -> component instance for components on an entity.
+    getEntity(entityId) {
+        let result = new Map();
+        for (const [componentName, componentArray] of this.componentEntries.entries()) {
+            if (componentArray) {
+                const component = componentArray.find(component => component.entityId == entityId);
+                if (component) {
+                    result.set(componentName, component);
+                }
+            }
+        }
+        return result;
+    }
+
+    // Adds all passed components to the commonent manager (arguments should be component instnaces)
+    addComponents() {
+        for (const component of arguments) {
+            let components = this.componentEntries.get(component.className());
+            if (!components) {
+                components = [];
+                this.componentEntries.set(component.className(), components);
+            }
+            const existingComponent = components.find(c => c.entityId == component.entityId);
+            if (existingComponent) {
+                throw 'Attempt to add a second component of type ' + component.className() + ' to entity id: ' + component.entityId;
+            }
+            components.push(component);
+        }
+    }
+
+    removeComponent(componentName, entityId) {
+        const componentArray = this.componentEntries.get(componentName);
+        if (componentArray) {
+            for (let i = componentArray.length - 1; i >= 0; i--) {
+                if (componentArray[i].entityId == entityId) {
+                    componentArray.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    removeEntity(entityId) {
+
+        for (const [key, componentArray] of this.componentEntries.entries()) {
+            for (let i = componentArray.length - 1; i >= 0; i--) {
+                const component = componentArray[i];
+                if (component.entityId == entityId) {
+                    componentArray.splice(i, 1);
+                }
+            }
+        }
+    }
+
+    removeAllComponentInstances(componentName) {
+        this.componentEntries.delete(componentName);
+    }
+}
+
+
+class Collision {
+    constructor(otherEntityId, collisionGroup, isNew) {
+        this.otherEntityId = otherEntityId;
+        this.collisionGroup = collisionGroup;
+        this.isNew = isNew;
+    }
+}
+
+
+class AnimationStateComponent extends Component {
+    constructor(entityId, animate, frameDelay, pauseAfterFrame, deleteAfterComplete) {
+        super(entityId);
+        this.animate = animate;
+        this.frameDelay = frameDelay;
+        this.pauseAfterFrame = pauseAfterFrame;
+        this.deleteAfterComplete = deleteAfterComplete ?? false;
+        this.animationComplete = false;
+    }
+}
+
+class BackgroundComponent extends Component {}
+
+class CollidingWithComponent extends Component {
+    constructor(entityId, collisions) {
+        super(entityId);
+        this.collisions = collisions ? collisions : [];
+    }
+}
+
+class CollisionRadiusComponent extends Component {
+    constructor(entityId, radius, collisionGroup) {
+        super(entityId);
+        this.radius = radius;
+        this.collisionGroup = collisionGroup;
+    }
+}
+
+class EnemyComponent extends Component {
+    constructor(entityId, health, points) {
+        super(entityId);
+        this.health = health;
+        this.points = points;
+        this.fireCooldownTimer = 0;
+    }
+}
+
+class LaserComponent extends Component {
+    constructor(entityId) {
+        super(entityId);
+    }
+}
+
+class ModifyScoreComponent extends Component {
+    constructor(entityId, delta) {
+        super(entityId);
+        this.delta = delta;
+    }
+}
+
+class PlayerComponent extends Component {
+    constructor(entityId) {
+        super(entityId);
+        this.lives = 3;
+        this.fireCooldownTimer = 0;
+        this.invulnerableTimer = playerSpawnInvulnerabilityTime;
+    }
+}
+
+class PlaySoundEffectComponent extends Component {
+    constructor(entityId, soundName) {
+        super(entityId);
+        this.soundName = soundName;
+    }
+}
+
+class PositionComponent extends Component {
+    constructor(entityId, x, y) {
+        super(entityId);
+        this.positionX = x;
+        this.positionY = y;
+    }
+}
+
+class SoundEffectComponent extends Component {
+    constructor(entityId, soundName, sound) {
+        super(entityId);
+        this.soundName = soundName;
+        this.sound = sound;
+    }
+}
+
+class SpriteSheetComponent extends Component {
+    constructor(entityId, name, image, framesX, framesY, totalFrames, frameWidth, frameHeight) {
+        super(entityId);
+        this.name = name;
+        this.image = image;
+        this.framesX = framesX;
+        this.framesY = framesY;
+        this.totalFrames = totalFrames;
+        this.frameWidth = frameWidth;
+        this.frameHeight = frameHeight;
+    }
+}
+
+class SpriteComponent extends Component {
+    constructor(entityId, spriteSheetName, startFrame, scaleFactor, smooth, flash, rotation) {
+        super(entityId);
+        this.spriteSheetName = spriteSheetName;
+        this.frame = startFrame ?? 0;
+        this.scaleFactor = scaleFactor ?? 1;
+        this.smooth = smooth ?? true;
+        this.flash = flash ?? false;
+        this.rotation = rotation ?? 0;
+    }
+}
+
+class TotalScoreComponent extends Component {
+    constructor(entityId, totalScore) {
+        super(entityId);
+        this.totalScore = totalScore;
+    }
+}
+
+class VelocityComponent extends Component {
+    constructor(entityId, velocityX, velocityY) {
+        super(entityId);
+        this.velocityX = velocityX;
+        this.velocityY = velocityY;
+    }
+}
+
+
+class System {
+    constructor() {
+    }
+
+    startup(componentManager) {
+    }
+
+    update(componentManager, gameFrame) {
+    }
+}
+
+class SystemManager {
+    constructor(componentManager) {
+        this.systems = [];
+        this.componentManager = componentManager;
+    }
+
+    registerSystem(system) {
+        this.systems.push(system);
+    }
+
+    startup() {
+        for (const system of this.systems) {
+            system.startup(this.componentManager);
+        }
+    }
+
+    update(gameFrame) {
+        for (const system of this.systems) {
+            system.update(this.componentManager, gameFrame);
+        }
+    }
+}
+
+class RenderCollisionRegionsForDebugSystem extends System {
+
+    update(componentManager, gameFrame) {
+        const view = componentManager.getView('CollisionRadiusComponent', 'PositionComponent');
+
+        for (const [collisionComponent, positionComponent] of view) {
+            drawCircle(positionComponent.positionX, positionComponent.positionY, collisionComponent.radius, 'red');
+        }
+    }
+}
+
+function createSpriteSheetComponentMap() {
+    return spriteSheetComponentMap;
+}
+
+class RenderSpritesSystem extends System {
+    constructor() {
+        super();
+        this.spriteSheetComponentMap;
+    }
+
+    update(componentManager, gameFrame) {        
+        const view = componentManager.getView('SpriteComponent', 'PositionComponent');
+        
+        for (const [spriteComponent, positionComponent] of view) {
+
+            const  draw = !spriteComponent.flash || Math.trunc(gameFrame / 10) % 2;
+
+            if (draw) {
+                const spriteSheetComponent = this.getSpriteSheetComponent(spriteComponent.spriteSheetName);
+
+                const frameNumber = spriteComponent.frame % spriteSheetComponent.totalFrames;
+
+                const frameX = frameNumber % spriteSheetComponent.framesX;
+                const frameY = Math.floor(frameNumber / spriteSheetComponent.framesX);
+                const width = spriteSheetComponent.frameWidth * spriteComponent.scaleFactor;
+                const height = spriteSheetComponent.frameHeight * spriteComponent.scaleFactor;
+
+                ctx.save();
+                ctx.imageSmoothingEnabled = spriteComponent.smooth;
+                ctx.translate(positionComponent.positionX, positionComponent.positionY);
+                ctx.rotate(spriteComponent.rotation);
+                ctx.drawImage(
+                    spriteSheetComponent.image, 
+                    frameX * spriteSheetComponent.frameWidth, 
+                    frameY * spriteSheetComponent.frameHeight, 
+                    spriteSheetComponent.frameWidth, 
+                    spriteSheetComponent.frameHeight, 
+                    -width / 2,
+                    -height / 2,
+                    width,  
+                    height);
+                ctx.restore();
+            }
+        }
+    }
+
+    getSpriteSheetComponent(name) {
+        if (!this.spriteSheetComponentMap) {
+            this.spriteSheetComponentMap = new Map();
+            const view = componentManager.getView('SpriteSheetComponent');
+            for (const [spriteSheetComponent] of view) {
+                this.spriteSheetComponentMap.set(spriteSheetComponent.name, spriteSheetComponent);
+            }
+        }
+        return this.spriteSheetComponentMap.get(name);
+    }
+}
+
+class PlayerSystem extends System {
+
+    startup(componentManager) {
+        const entityId = componentManager.createEntity();
+        componentManager.addComponents(
+            new PlayerComponent(entityId),
+            new CollisionRadiusComponent(entityId, 50, 'Player'),
+            new PositionComponent(entityId, canvas.width / 2, canvas.height - 50),
+            new VelocityComponent(entityId, 0, 0),
+            new SpriteComponent(entityId, 'Player', 0, 6, false),
+            new AnimationStateComponent(entityId, true, 8)
+        );
+    }
+
+    update(componentManager, gameFrme) {
+        this.handleInvulnerable(componentManager);
+        this.handleInput(componentManager);
+        this.handleCollisions(componentManager);
+    }
+
+    handleInvulnerable(componentManager) {
+
+        let view = componentManager.getView('PlayerComponent', 'SpriteComponent');
+        if (view.length > 0) {
+            const [playerComponent, spriteComponent] = view[0];
+
+            if (playerComponent.invulnerableTimer > 0) {
+                spriteComponent.flash = true;
+                playerComponent.invulnerableTimer--;
+            } else if (playerComponent.invulnerableTimer == 0) {
+                spriteComponent.flash = false;
+            }
+        }
+    }
+
+    handleInput(componentManager) {
+
+        let view = componentManager.getView('PlayerComponent', 'PositionComponent', 'VelocityComponent');
+        if (view.length > 0) {
+
+            const [playerComponent, positionComponent, velocityComponent] = view[0];
+
+            velocityComponent.velocityX = 0;
+            velocityComponent.velocityY = 0;
+
+            // Handle move
+            if (inputKeys.a && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
+            if (inputKeys.d && positionComponent.positionX < canvas.width - 40) velocityComponent.velocityX += pixelsPerFrameKeyboardVelocity;
+            if (inputKeys.w && positionComponent.positionY > 50) velocityComponent.velocityY -= pixelsPerFrameKeyboardVelocity;
+            if (inputKeys.s && positionComponent.positionY < canvas.height - 50) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
+
+            // Handle fire
+            if (inputKeys.space && playerComponent.fireCooldownTimer == 0) {
+
+                const laserId = componentManager.createEntity();
+                componentManager.addComponents(
+                    new LaserComponent(laserId),
+                    new PositionComponent(laserId, positionComponent.positionX, positionComponent.positionY - 25),
+                    new VelocityComponent(laserId, 0, -20),
+                    new SpriteComponent(laserId, 'Laser', 0, 5, false),
+                    new CollisionRadiusComponent(laserId, 20, 'PlayerLaser'),
+                );
+
+                playerComponent.fireCooldownTimer = playerFireCooldownWait;
+            }
+
+            if (playerComponent.fireCooldownTimer > 0) playerComponent.fireCooldownTimer--;
+        }
+    }
+
+    handleCollisions(componentManager) {
+        let scoreDelta = 0;
+        const view = componentManager.getView('PlayerComponent', 'PositionComponent', 'VelocityComponent', 'CollidingWithComponent');
+        for (const [playerComponent, positionComponent, velocityComponent, collidingWithComponent] of view) {
+
+            // If the player is not invulnerable
+            if (playerComponent.invulnerableTimer == 0) {
+
+                for (const collision of collidingWithComponent.collisions) {
+
+                    // If the player collides with an enemy or enemy laser
+                    if (collision.isNew && (collision.collisionGroup == 'Enemy' || collision.collisionGroup == 'EnemyLaser')) {
+                        const explosionId = componentManager.createEntity();
+                        componentManager.addComponents(
+                            new PositionComponent(explosionId, positionComponent.positionX, positionComponent.positionY),
+                            new VelocityComponent(explosionId, velocityComponent.velocityX, velocityComponent.velocityY),
+                            new SpriteComponent(explosionId, 'Explosion', 0, 5, false),
+                            new AnimationStateComponent(explosionId, true, 3, 5, true),
+                        );
+
+                        if (playerComponent.lives > 0) {
+                            playerComponent.lives--;
+                            playerComponent.invulnerableTimer = playerSpawnInvulnerabilityTime;
+                        }
+                        if (playerComponent.lives == 0) {
+                            componentManager.removeEntity(playerComponent.entityId);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+class SpriteAnimateSystem extends System {
+
+    update(componentManager, gameFrame) {
+        const view = componentManager.getView('AnimationStateComponent', 'SpriteComponent');
+        for (const [animationStateComponent, spriteComponent] of view) {
+
+            if (animationStateComponent.animate) {
+                if (animationStateComponent.pauseAfterFrame && spriteComponent.frame >= animationStateComponent.pauseAfterFrame) {
+                    animationStateComponent.animationComplete = true;
+
+                    if (animationStateComponent.deleteAfterComplete) {
+                        componentManager.removeEntity(animationStateComponent.entityId);
+                    }
+                }
+                else if (gameFrame % animationStateComponent.frameDelay == 0) {
+
+                    spriteComponent.frame++;
+                }
+            }
+        }
+    }
+}
+
+class MovementSystem extends System {
+
+    update(componentManager, gameFrame) {
+        const view = componentManager.getView('PositionComponent', 'VelocityComponent');
+
+        for (const [positionComponent, velocityComponent] of view) {
+            positionComponent.positionX += velocityComponent.velocityX;
+            positionComponent.positionY += velocityComponent.velocityY;
+        }
+    }
+}
+
+class CollisionDetectionSystem extends System {
+
+    update(componentManager, gameFrame) {
+        // Set of previous collisions, key of form [entityId]=>[otherEntityId]
+        const previousCollisions = new Map();
+
+        // Snapshot already colliding
+        const view = componentManager.getView('CollidingWithComponent');
+        for (const [collidingWithComponent] of view) {
+            for (const collision of collidingWithComponent.collisions) {
+                previousCollisions.set('' + collidingWithComponent.entityId + '=>' + collision.otherEntityId);
+            }
+        }
+
+        // Map of new collisions. Key is entity id, value is array of Collisions
+        const newCollisions = new Map();
+
+        // Update all collisions
+        componentManager.removeAllComponentInstances('CollidingWithComponent');
+
+        const view2 = componentManager.getView('PositionComponent', 'CollisionRadiusComponent');
+        for (const [positionComponent, collisionRadiusComponent] of view2) {
+            for (const [otherPositionComponent, otherCollisionRadiusComponent] of view2) {
+                if (this.overlaps(positionComponent, collisionRadiusComponent, otherPositionComponent, otherCollisionRadiusComponent)) {
+                    const isNew = !previousCollisions.has('' + positionComponent.entityId + '=>' + otherPositionComponent.entityId);
+
+                    if (!newCollisions.has(positionComponent.entityId)) {
+                        newCollisions.set(positionComponent.entityId, []);
+                    }
+
+                    const newCollision = new Collision(otherPositionComponent.entityId, otherCollisionRadiusComponent.collisionGroup, isNew);
+                    newCollisions.get(positionComponent.entityId).push(newCollision);
+                }
+            }
+        }
+
+        // Now add all the components
+        for (const [entityId, collisions] of newCollisions) {
+            componentManager.addComponents(
+                new CollidingWithComponent(entityId, collisions)
+            );
+        }
+    }
+
+    overlaps(positionComponent, collisionRadiusComponent, otherPositionComponent, otherCollisionRadiusComponent) {
+        return (positionComponent.entityId != otherPositionComponent.entityId &&
+               (Math.pow(positionComponent.positionX - otherPositionComponent.positionX, 2) +
+                Math.pow(positionComponent.positionY - otherPositionComponent.positionY, 2)) < 
+                Math.pow(collisionRadiusComponent.radius + otherCollisionRadiusComponent.radius, 2));
+
+    }
+}
+
+class EnemySystem extends System {
+
+    update(componentManager, gameFrame) {
+
+        // Add new enemies
+        if (gameFrame % 80 == 0) {
+
+            const enemyType = Math.trunc(Math.random() * 3);
+            var scale = 0;
+            var points = 0;
+
+            switch (enemyType) {
+                case 0:
+                    scale = 3;
+                    points = 60;
+                    break;
+                case 1:
+                    scale = 3;
+                    points = 200;
+                    break;
+                case 2:
+                    scale = 5;
+                    points = 500;
+                    break;
+            }
+
+            const radius = 14 * scale;
+            var health = enemyType + 1;
+            var spriteName = 'Enemy' + health;
+
+            let entityId = componentManager.createEntity();
+            componentManager.addComponents(
+                new EnemyComponent(entityId, health, points), 
+                new CollisionRadiusComponent(entityId, radius, 'Enemy'),
+                new PositionComponent(entityId, (canvas.width - radius * 2) * Math.random() + radius, 0 - radius * 2),
+                new VelocityComponent(entityId, 0, (Math.random() * 5 + 3)),
+                new SpriteComponent(entityId, spriteName, 0, scale, false),
+                new AnimationStateComponent(entityId, true, 10)
+            );
+        }
+
+        // Handle enemy collisions
+        let view = componentManager.getView('EnemyComponent', 'PositionComponent', 'VelocityComponent', 'CollidingWithComponent', 'AnimationStateComponent', 'SpriteComponent');
+
+        for (const [enemyComponent, positionComponent, velocityComponent, collidingWithComponent, animationStateComponent, spriteComponent] of view) {
+            for (const collision of collidingWithComponent.collisions) {
+                var blowUp = false;
+                if (collision.collisionGroup == 'PlayerLaser') {
+                    enemyComponent.health -= 1;
+                    if (enemyComponent.health == 0) {
+                        blowUp = true;
+                        componentManager.addComponents(
+                            new ModifyScoreComponent(componentManager.createEntity(), enemyComponent.points),
+                        );
+                    }
+                } else if (collision.collisionGroup == 'Player') {
+                    blowUp = true;
+                }
+                if (blowUp) {
+                    const explosionId = componentManager.createEntity();
+                    componentManager.addComponents(
+                        new PositionComponent(explosionId, positionComponent.positionX, positionComponent.positionY),
+                        new VelocityComponent(explosionId, velocityComponent.velocityX, velocityComponent.velocityY),
+                        new SpriteComponent(explosionId, 'Explosion', 0, 5, false),
+                        new AnimationStateComponent(explosionId, true, 3, 5, true),
+                    );
+                    componentManager.removeEntity(enemyComponent.entityId);
+                }
+            }
+        }
+
+        // Remove enemies that have left the screen
+        view = componentManager.getView('EnemyComponent', 'PositionComponent', 'CollisionRadiusComponent');
+
+        for (const [enemyComponent, positionComponent, CollisionRadiusComponent] of view) {
+            if (positionComponent.positionY > canvas.height + CollisionRadiusComponent.radius * 2) {
+                componentManager.removeEntity(enemyComponent.entityId);
+            }
+        }
+
+        // Fire weapons!
+        view = componentManager.getView('EnemyComponent', 'PositionComponent');
+        for (const [enemyComponent, positionComponent] of view) {            
+            if (enemyComponent.fireCooldownTimer == 0) {
+                const laserId = componentManager.createEntity();
+                componentManager.addComponents(
+                    new LaserComponent(laserId),
+                    new PositionComponent(laserId, positionComponent.positionX, positionComponent.positionY + 25),
+                    new VelocityComponent(laserId, 0, 15),
+                    new SpriteComponent(laserId, 'Laser', 0, 5, false),
+                    new CollisionRadiusComponent(laserId, 20, 'EnemyLaser'),
+                );
+                enemyComponent.fireCooldownTimer = enemyFireCooldownWait;
+            }
+            else {
+                enemyComponent.fireCooldownTimer--;
+            }
+        }
+    }
+}
+
+class LaserSystem extends System {
+
+    update(componentManager, gameFrame) {
+
+        // Handle laser collisions
+        let view = componentManager.getView('LaserComponent', 'CollisionRadiusComponent', 'CollidingWithComponent');
+
+        for (const [laserComponent, collisionRadiusComponent, collidingWithComponent] of view) {
+            for (const collision of collidingWithComponent.collisions) {
+                if ((collision.collisionGroup == 'Enemy' && collisionRadiusComponent.collisionGroup == 'PlayerLaser') ||
+                    (collision.collisionGroup == 'Player' && collisionRadiusComponent.collisionGroup == 'EnemyLaser')) {
+
+                    //TODO: Play proper sound effect
+
+                    componentManager.removeEntity(laserComponent.entityId);
+                }
+            }
+        }
+
+        // Remove Lasers that have left the screen or collided and completed their animation
+        view = componentManager.getView('LaserComponent', 'PositionComponent', 'CollisionRadiusComponent', 'AnimationStateComponent');
+
+        for (const [laserComponent, positionComponent, collisionRadiusComponent] of view) {
+            if ((positionComponent.positionY < 0 - collisionRadiusComponent.radius) ||
+                (positionComponent.positionY > canvas.height + collisionRadiusComponent.radius)) {
+                componentManager.removeEntity(laserComponent.entityId);
+            }
+        }
+    }
+}
+
+class AudioSystem extends System {
+    constructor() {
+        super();
+        this.soundEffectComponentMap;
+    }
+
+    update(componentManager, gameFrame) {
+        const view = componentManager.getView('PlaySoundEffectComponent');
+        for (const [playSoundEffectComponent] of view) { 
+            const soundEffectComponent = this.getSoundEffectComponent(playSoundEffectComponent.soundName);
+            //console.log('playing sound ' + playSoundEffectComponent.soundName);
+            soundEffectComponent.sound.play();
+        }
+
+        componentManager.removeAllComponentInstances('PlaySoundEffectComponent');
+    }
+
+    getSoundEffectComponent(name) {
+        if (!this.soundEffectComponentMap) {
+            this.soundEffectComponentMap = new Map();
+            const view = componentManager.getView('SoundEffectComponent');
+            for (const [soundEffectComponent] of view) {
+                this.soundEffectComponentMap.set(soundEffectComponent.soundName, soundEffectComponent);
+            }
+        }
+        return this.soundEffectComponentMap.get(name);
+    }
+}
+
+class BackgroundSystem extends System {
+
+    startup(componentManager) {
+        const bg1 = componentManager.createEntity();
+        const bg2 = componentManager.createEntity();
+        componentManager.addComponents(
+            new BackgroundComponent(bg1),
+            new PositionComponent(bg1, canvas.width / 2, canvas.height / 2),
+            new VelocityComponent(bg1, 0, 1),
+            new SpriteComponent(bg1, 'Background', 0, canvas.width / 256, false),
+            new AnimationStateComponent(bg1, true, 25),
+
+            new BackgroundComponent(bg2),
+            new PositionComponent(bg2, canvas.width / 2, canvas.height / 2 - canvas.height),
+            new VelocityComponent(bg2, 0, 1),
+            new SpriteComponent(bg2, 'Background', 0, canvas.width / 256, false),
+            new AnimationStateComponent(bg2, true, 25),
+        );
+    }
+
+    update(componentManager, gameFrame) {
+        const view = componentManager.getView('BackgroundComponent', 'PositionComponent');
+        for (const [backgroundComponent, positionComponent] of view) {
+            if (positionComponent.positionY >= canvas.height + canvas.height / 2) {
+                positionComponent.positionY -= canvas.height * 2;
+            }
+        }
+    }
+}
+
+class HudSystem extends System {
+
+    startup(componentManager) {
+        const entityId = componentManager.createEntity();
+        componentManager.addComponents(
+            new TotalScoreComponent(entityId, 0)
+        );
+    }
+
+    update(componentManager, gameFrame) {
+        var score = 0;
+        var lives = 0;
+
+        //TODO: Move summing up the score to a score system
+        const totalScoreView = componentManager.getView('TotalScoreComponent');
+        if (totalScoreView.length > 0) {
+            const [totalScoreComponent] = totalScoreView[0];
+
+            const view = componentManager.getView('ModifyScoreComponent');
+            for (const [modifyScoreComponent] of view) {
+                totalScoreComponent.totalScore += modifyScoreComponent.delta;
+            }
+            componentManager.removeAllComponentInstances('ModifyScoreComponent');
+
+            score = totalScoreComponent.totalScore;
+        }
+
+        const livesView = componentManager.getView('PlayerComponent');
+        if (livesView.length > 0) {
+            const [playerComponent] = livesView[0];
+
+            lives = playerComponent.lives;
+        }
+
+        ctx.font = '50px Georgia';
+        ctx.fillStyle = 'white';
+        ctx.fillText('score: ' + score, 10, 50);
+        ctx.fillText('lives: ' + lives, 600, 50);
+    }
+}
+
+// Initialization
+let gameFrame = 0;
+
+const componentManager = new ComponentManager();
+const systemManager = new SystemManager(componentManager);
+systemManager.registerSystem(new BackgroundSystem());
+systemManager.registerSystem(new PlayerSystem());
+systemManager.registerSystem(new MovementSystem());
+systemManager.registerSystem(new CollisionDetectionSystem());
+systemManager.registerSystem(new LaserSystem());
+systemManager.registerSystem(new EnemySystem());
+systemManager.registerSystem(new SpriteAnimateSystem());
+//systemManager.registerSystem(new AudioSystem());
+systemManager.registerSystem(new RenderSpritesSystem());
+//systemManager.registerSystem(new RenderCollisionRegionsForDebugSystem());
+systemManager.registerSystem(new HudSystem());
+
+const playerImage = createImage('player.png');
+const backgroundImage = createImage('stars.png');
+const laserImage = createImage('laser.png');
+const enemy1Image = createImage('enemy1.png');
+const enemy2Image = createImage('enemy2.png');
+const enemy3Image = createImage('enemy3.png');
+const explosionImage = createImage('boom.png');
+
+componentManager.addComponents(
+    new SpriteSheetComponent(componentManager.createEntity(), 'Player', playerImage, 4, 4, 13, 16, 16),
+    new SpriteSheetComponent(componentManager.createEntity(), 'Background', backgroundImage, 3, 2, 5, 256, 512),
+    new SpriteSheetComponent(componentManager.createEntity(), 'Laser', laserImage, 1, 1, 1, 32, 32),
+    new SpriteSheetComponent(componentManager.createEntity(), 'Enemy1', enemy1Image, 2, 2, 4, 32, 32),
+    new SpriteSheetComponent(componentManager.createEntity(), 'Enemy2', enemy2Image, 3, 4, 12, 32, 32),
+    new SpriteSheetComponent(componentManager.createEntity(), 'Enemy3', enemy3Image, 2, 3, 6, 32, 32),
+    new SpriteSheetComponent(componentManager.createEntity(), 'Explosion', explosionImage, 3, 3, 7, 32, 32),
+);
+
+systemManager.startup(componentManager);
+
+// Animation Loop
+function animate(params) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    systemManager.update(gameFrame);
+
+    gameFrame++;
+    requestAnimationFrame(animate);
+}
+animate();
