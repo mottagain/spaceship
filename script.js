@@ -6,6 +6,7 @@
 
 const pixelsPerFrameKeyboardVelocity = 5;
 const playerFireCooldownWait = 35;
+const playerRespawnTime = 100;
 const playerSpawnInvulnerabilityTime = 200;
 const enemyFireCooldownWait = 200;
 
@@ -275,6 +276,7 @@ class PlayerComponent extends Component {
         super(entityId);
         this.lives = 3;
         this.fireCooldownTimer = 0;
+        this.respawnTimer = 0;
         this.invulnerableTimer = playerSpawnInvulnerabilityTime;
     }
 }
@@ -461,22 +463,35 @@ class PlayerSystem extends System {
     }
 
     update(componentManager, gameFrme) {
-        this.handleInvulnerable(componentManager);
+        this.handleSpawn(componentManager);
         this.handleInput(componentManager);
         this.handleCollisions(componentManager);
     }
 
-    handleInvulnerable(componentManager) {
+    handleSpawn(componentManager) {
 
         let view = componentManager.getView('PlayerComponent', 'SpriteComponent');
         if (view.length > 0) {
             const [playerComponent, spriteComponent] = view[0];
 
-            if (playerComponent.invulnerableTimer > 0) {
-                spriteComponent.flash = true;
-                playerComponent.invulnerableTimer--;
-            } else if (playerComponent.invulnerableTimer == 0) {
-                spriteComponent.flash = false;
+            if (playerComponent.respawnTimer > 0) {
+                playerComponent.respawnTimer--;
+
+                if (playerComponent.respawnTimer == 0) {
+                    componentManager.addComponents(
+                        new PositionComponent(playerComponent.entityId, canvas.width / 2, canvas.height - 50),
+                    );
+                    playerComponent.invulnerableTimer = playerSpawnInvulnerabilityTime;                }
+            }
+            else {
+                if (playerComponent.invulnerableTimer > 0) {
+                    spriteComponent.flash = true;
+                    playerComponent.invulnerableTimer--;
+
+                    if (playerComponent.invulnerableTimer == 0) {
+                        spriteComponent.flash = false;
+                    }
+                }
             }
         }
     }
@@ -538,7 +553,8 @@ class PlayerSystem extends System {
 
                         if (playerComponent.lives > 0) {
                             playerComponent.lives--;
-                            playerComponent.invulnerableTimer = playerSpawnInvulnerabilityTime;
+                            playerComponent.respawnTimer = playerRespawnTime;
+                            componentManager.removeComponent("PositionComponent", playerComponent.entityId);
                         }
                         if (playerComponent.lives == 0) {
                             componentManager.removeEntity(playerComponent.entityId);
