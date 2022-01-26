@@ -98,6 +98,14 @@ canvas.addEventListener('keyup', event => {
     }
 });
 
+const gamepadKeys = {
+    left: false,
+    right: false,
+    up: false,
+    down: false,
+    a: false,
+    b: false,
+}
 
 // ECS
 class Component {
@@ -507,10 +515,10 @@ class PlayerSystem extends System {
             velocityComponent.velocityY = 0;
 
             // Handle move
-            if (inputKeys.a && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
-            if (inputKeys.d && positionComponent.positionX < canvas.width - 40) velocityComponent.velocityX += pixelsPerFrameKeyboardVelocity;
-            if (inputKeys.w && positionComponent.positionY > 50) velocityComponent.velocityY -= pixelsPerFrameKeyboardVelocity;
-            if (inputKeys.s && positionComponent.positionY < canvas.height - 50) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
+            if ((inputKeys.a || gamepadKeys.left) && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
+            if ((inputKeys.d || gamepadKeys.right) && positionComponent.positionX < canvas.width - 40) velocityComponent.velocityX += pixelsPerFrameKeyboardVelocity;
+            if ((inputKeys.w || gamepadKeys.up) && positionComponent.positionY > 50) velocityComponent.velocityY -= pixelsPerFrameKeyboardVelocity;
+            if ((inputKeys.s || gamepadKeys.down) && positionComponent.positionY < canvas.height - 50) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
 
             // Handle fire
             if (inputKeys.space && playerComponent.fireCooldownTimer == 0) {
@@ -775,7 +783,7 @@ class LaserSystem extends System {
         }
 
         // Remove Lasers that have left the screen or collided and completed their animation
-        view = componentManager.getView('LaserComponent', 'PositionComponent', 'CollisionRadiusComponent', 'AnimationStateComponent');
+        view = componentManager.getView('LaserComponent', 'PositionComponent', 'CollisionRadiusComponent');
 
         for (const [laserComponent, positionComponent, collisionRadiusComponent] of view) {
             if ((positionComponent.positionY < 0 - collisionRadiusComponent.radius) ||
