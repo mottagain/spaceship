@@ -37,6 +37,7 @@ const inputKeys = {
     a: false,
     s: false,
     d: false,
+    q: false,
     space: false,
 }
 
@@ -57,6 +58,10 @@ canvas.addEventListener('keydown', event => {
         case 'w':
         case 'W':
             inputKeys.w = true;
+            break;
+        case 'q':
+        case 'Q':
+            inputKeys.q = true;
             break;
         case ' ':
             inputKeys.space = true;
@@ -81,6 +86,10 @@ canvas.addEventListener('keyup', event => {
         case 'w':
         case 'W':
             inputKeys.w = false;
+            break;
+        case 'q':
+        case 'Q':
+            inputKeys.q = false;
             break;
         case ' ':
             inputKeys.space = false;
@@ -189,7 +198,15 @@ class ComponentManager {
     }
 
     removeAllComponentInstances(componentName) {
-        this.componentEntries.delete(componentName);
+        this.componentEntries.set(componentName, []);
+    }
+
+    getStats() {
+        var result = [];
+        for (const [key, componentArray] of this.componentEntries.entries()) {
+            result.push([key, componentArray.length]);
+        }
+        return result;
     }
 }
 
@@ -850,6 +867,18 @@ class HudSystem extends System {
         ctx.fillStyle = 'white';
         ctx.fillText('score: ' + score, 10, 50);
         ctx.fillText('lives: ' + lives, 600, 50);
+
+        if (inputKeys.q) {
+            ctx.fillStyle = 'grey';
+            var stats = componentManager.getStats();
+            var yOffset = 100;
+            if (stats) {
+                for (const [componentName, count] of stats) {
+                    ctx.fillText(componentName + ': ' + count, 10, yOffset);
+                    yOffset += 50;
+                }
+            }
+        }
     }
 }
 
