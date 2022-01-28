@@ -107,6 +107,45 @@ const gamepadKeys = {
     b: false,
 }
 
+function pollGamepadState() {
+    var gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads : []);
+    gamepadKeys.left = gamepadKeys.right = gamepadKeys.up = gamepadKeys.down = gamepadKeys.a = gamepadKeys.b = false;
+
+    if (gamepads && gamepads.length > 0) {
+        var gamepad = gamepads[0];
+        if (gamepad) {
+
+            var button0 = gamepad.buttons[0];
+            if (button0) {
+                gamepadKeys.a = button0.pressed;
+            }
+
+            var button1 = gamepad.buttons[1];
+            if (button1) {
+                gamepadKeys.b = button1.pressed;
+            }
+
+            if (gamepad.axes.length > 0) {
+                var horizontalAxisStick0 = gamepad.axes[0];
+                if (horizontalAxisStick0 < -.5) {
+                    gamepadKeys.left = true;
+                }
+                else if (horizontalAxisStick0 > .5) {
+                    gamepadKeys.right = true;
+                }
+                
+                var verticalAxisStick0 = gamepad.axes[1];
+                if (verticalAxisStick0 < -.5) {
+                    gamepadKeys.up = true;
+                }
+                else if (verticalAxisStick0 > .5) {
+                    gamepadKeys.down = true;
+                }
+            }
+        }
+    }
+}
+
 // ECS
 class Component {
     constructor(entityId) {
@@ -521,7 +560,7 @@ class PlayerSystem extends System {
             if ((inputKeys.s || gamepadKeys.down) && positionComponent.positionY < canvas.height - 50) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
 
             // Handle fire
-            if (inputKeys.space && playerComponent.fireCooldownTimer == 0) {
+            if ((inputKeys.space || gamepadKeys.a) && playerComponent.fireCooldownTimer == 0) {
 
                 const laserId = componentManager.createEntity();
                 componentManager.addComponents(
@@ -948,6 +987,8 @@ function animate(params) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     systemManager.update(gameFrame);
+
+    pollGamepadState();
 
     gameFrame++;
     requestAnimationFrame(animate);

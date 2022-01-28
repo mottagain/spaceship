@@ -9,5 +9,4 @@ Game over screen
 Scoreboard
 Rotate circle enemy
 Pixelate font
-Hook up input to joystick
 
