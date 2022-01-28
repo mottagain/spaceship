@@ -1,9 +1,6 @@
 // From tutorial at: https://www.youtube.com/watch?v=jl29qI62XPg
 //    Also see: https://opengameart.org/ and https://gamedeveloperstudio.com
 
-//TODO: Move score keeping into ECS
-//TODO: Draw score in ECS
-
 const pixelsPerFrameKeyboardVelocity = 5;
 const playerFireCooldownWait = 35;
 const playerRespawnTime = 100;
@@ -892,7 +889,7 @@ class BackgroundSystem extends System {
     }
 }
 
-class HudSystem extends System {
+class ScoreSystem extends System {
 
     startup(componentManager) {
         const entityId = componentManager.createEntity();
@@ -902,10 +899,6 @@ class HudSystem extends System {
     }
 
     update(componentManager, gameFrame) {
-        var score = 0;
-        var lives = 0;
-
-        //TODO: Move summing up the score to a score system
         const totalScoreView = componentManager.getView('TotalScoreComponent');
         if (totalScoreView.length > 0) {
             const [totalScoreComponent] = totalScoreView[0];
@@ -915,7 +908,19 @@ class HudSystem extends System {
                 totalScoreComponent.totalScore += modifyScoreComponent.delta;
             }
             componentManager.removeAllComponentInstances('ModifyScoreComponent');
+        }
+    }
+}
 
+class HudSystem extends System {
+
+    update(componentManager, gameFrame) {
+        var score = 0;
+        var lives = 0;
+
+        const totalScoreView = componentManager.getView('TotalScoreComponent');
+        if (totalScoreView.length > 0) {
+            const [totalScoreComponent] = totalScoreView[0];
             score = totalScoreComponent.totalScore;
         }
 
@@ -960,6 +965,7 @@ systemManager.registerSystem(new SpriteAnimateSystem());
 //systemManager.registerSystem(new AudioSystem());
 systemManager.registerSystem(new RenderSpritesSystem());
 //systemManager.registerSystem(new RenderCollisionRegionsForDebugSystem());
+systemManager.registerSystem(new ScoreSystem());
 systemManager.registerSystem(new HudSystem());
 
 const playerImage = createImage('player.png');
