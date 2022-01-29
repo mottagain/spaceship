@@ -1031,22 +1031,40 @@ class HudSystem extends System {
     }
 
     update(componentManager, gameFrame) {
-        var score = 0;
-        var lives = 0;
+        const score = this.getTotalScore();
+        const lives = this.getRemainingLives();
 
+        this.updateExtraLifeGlyphs(lives);
+        this.updateHighScore(score);
+        this.updateDebugComponentCounts();
+        
+        if (lives == 0) {
+            this.showGameOver();
+        }
+    }
+
+    getTotalScore() {
+        var score = 0;
         const totalScoreView = componentManager.getView('TotalScoreComponent');
         if (totalScoreView.length > 0) {
             const [totalScoreComponent] = totalScoreView[0];
             score = totalScoreComponent.totalScore;
         }
+        return score;
+    }
 
+    getRemainingLives() {
+        var lives = 0;
         const livesView = componentManager.getView('PlayerComponent');
         if (livesView.length > 0) {
             const [playerComponent] = livesView[0];
 
             lives = playerComponent.lives;
         }
+        return lives;
+    }
 
+    updateExtraLifeGlyphs(lives) {
         const extraLivesView = componentManager.getView('ExtraLifeComponent');
         if (extraLivesView.length != lives) {
             for (var [extraLifeComponent] of extraLivesView) {
@@ -1062,11 +1080,15 @@ class HudSystem extends System {
                 );
             }
         }
+    }
 
+    updateHighScore(score) {
         ctx.font = '50px Georgia';
         ctx.fillStyle = 'white';
         ctx.fillText('score: ' + score, 10, 50);
+    }
 
+    updateDebugComponentCounts() {
         if (inputKeys.q) {
             ctx.fillStyle = 'grey';
             var stats = componentManager.getStats();
@@ -1078,6 +1100,12 @@ class HudSystem extends System {
                 }
             }
         }
+    }
+
+    showGameOver() {
+        ctx.font = '100px Georgia';
+        ctx.fillStyle = 'white';
+        ctx.fillText('Game Over', 150, 700);
     }
 }
 
