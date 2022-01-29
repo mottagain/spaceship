@@ -16,6 +16,12 @@ const ctx = canvas.getContext('2d');
 canvas.width = 800;
 canvas.height = 1600;
 
+// Font setup
+const myFont = new FontFace('Pixeloid Sans', 'url(PixeloidSans-nR3g1.ttf)');
+myFont.load().then((font) => { 
+    document.fonts.add(font); 
+});
+
 // Helpers
 function drawCircle(x, y, radius, color) {
     ctx.save();
@@ -1083,7 +1089,7 @@ class HudSystem extends System {
     }
 
     updateHighScore(score) {
-        ctx.font = '50px Georgia';
+        ctx.font = '50px "Pixeloid Sans"';
         ctx.fillStyle = 'white';
         ctx.fillText('score: ' + score, 10, 50);
     }
@@ -1103,7 +1109,7 @@ class HudSystem extends System {
     }
 
     showGameOver() {
-        ctx.font = '100px Georgia';
+        ctx.font = '100px "Pixeloid Sans"';
         ctx.fillStyle = 'white';
         ctx.fillText('Game Over', 150, 700);
     }

@@ -2,9 +2,8 @@
 A Galaga-like game for fun.
 
 # TODO
-Game over screen
+Insert coin logic
 Scoreboard
-Pixelate font
 Enemy waves system
 Rotate circle enemy
 Add ComponentManager overlaods to work with Singleton components
