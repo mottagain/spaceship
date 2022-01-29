@@ -484,14 +484,14 @@ class GamePhaseSystem extends System {
     }
 
     startup(componentManager) {
-        systemManager.setPhase('game');
+        systemManager.setPhase('pregame');
     }
 
     update(componentManager, gameFrame) {
         
         const view = componentManager.getView('ChangePhaseComponent');
         for (const [changePhaseComponent] of view) {
-            setPhase(changePhaseComponent.targetPhase);
+            systemManager.setPhase(changePhaseComponent.targetPhase);
         }
     }
 }
@@ -1081,12 +1081,36 @@ class HudSystem extends System {
     }
 }
 
+class PregameSystem extends System {
+    constructor() {
+        super('pregame');
+    }
+
+    startup(componentManager) {
+        const entityId = componentManager.createEntity();
+        componentManager.addComponents(
+            new PositionComponent(entityId, canvas.width / 2, canvas.height / 2),
+            new SpriteComponent(entityId, 'StartScreen', 0, canvas.width / 256),
+            new AnimationStateComponent(entityId, true, 10),
+        );
+    }
+
+    update(componentManager, gameFrame) {
+        if (inputKeys.space || gamepadKeys.a) {
+            componentManager.addComponents(
+                new ChangePhaseComponent(componentManager.createEntity(), 'game'),
+            );
+        }
+    }
+}
+
 // Initialization
 let gameFrame = 0;
 
 const componentManager = new ComponentManager();
 const systemManager = new SystemManager(componentManager);
 systemManager.registerSystem(new GamePhaseSystem());
+systemManager.registerSystem(new PregameSystem());
 systemManager.registerSystem(new BackgroundSystem());
 systemManager.registerSystem(new PlayerSystem());
 systemManager.registerSystem(new MovementSystem());
@@ -1107,6 +1131,7 @@ const enemy1Image = createImage('enemy1.png');
 const enemy2Image = createImage('enemy2.png');
 const enemy3Image = createImage('enemy3.png');
 const explosionImage = createImage('boom.png');
+const startScreenImage = createImage('startscreen.png');
 
 componentManager.addComponents(
     new SpriteSheetComponent(componentManager.createEntity(), 'Player', playerImage, 4, 4, 13, 16, 16),
@@ -1116,6 +1141,7 @@ componentManager.addComponents(
     new SpriteSheetComponent(componentManager.createEntity(), 'Enemy2', enemy2Image, 3, 4, 12, 32, 32),
     new SpriteSheetComponent(componentManager.createEntity(), 'Enemy3', enemy3Image, 2, 3, 6, 32, 32),
     new SpriteSheetComponent(componentManager.createEntity(), 'Explosion', explosionImage, 3, 3, 7, 32, 32),
+    new SpriteSheetComponent(componentManager.createEntity(), 'StartScreen', startScreenImage, 2, 2, 3, 256, 512),
 );
 
 systemManager.startup(componentManager);
