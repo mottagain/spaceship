@@ -302,6 +302,12 @@ class EnemyComponent extends Component {
     }
 }
 
+class ExtraLifeComponent extends Component {    
+    constructor(entityId) {
+        super(entityId);
+    }
+}
+
 class LaserComponent extends Component {
     constructor(entityId) {
         super(entityId);
@@ -931,10 +937,25 @@ class HudSystem extends System {
             lives = playerComponent.lives;
         }
 
+        const extraLivesView = componentManager.getView('ExtraLifeComponent');
+        if (extraLivesView.length != lives) {
+            for (var [extraLifeComponent] of extraLivesView) {
+                componentManager.removeEntity(extraLifeComponent.entityId);
+            }
+
+            for (var i = 0; i < lives; i++) {
+                const entityId = componentManager.createEntity();
+                componentManager.addComponents(
+                    new ExtraLifeComponent(entityId),
+                    new PositionComponent(entityId, 760 - i * 64, 40),
+                    new SpriteComponent(entityId, 'Player', 0, 4, false),
+                );
+            }
+        }
+
         ctx.font = '50px Georgia';
         ctx.fillStyle = 'white';
         ctx.fillText('score: ' + score, 10, 50);
-        ctx.fillText('lives: ' + lives, 600, 50);
 
         if (inputKeys.q) {
             ctx.fillStyle = 'grey';
