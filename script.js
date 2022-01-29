@@ -407,10 +407,14 @@ class VelocityComponent extends Component {
 
 
 class System {
-    constructor() {
+    constructor(phase) {
+        this.phase = phase;
     }
 
     startup(componentManager) {
+    }
+
+    teardown(componentManager) {        
     }
 
     update(componentManager, gameFrame) {
@@ -421,6 +425,8 @@ class SystemManager {
     constructor(componentManager) {
         this.systems = [];
         this.componentManager = componentManager;
+        this.currentPhase = undefined;
+        this.nextPhase = undefined;
     }
 
     registerSystem(system) {
@@ -429,13 +435,37 @@ class SystemManager {
 
     startup() {
         for (const system of this.systems) {
-            system.startup(this.componentManager);
+            if (system.phase == undefined) {
+                system.startup(this.componentManager);
+            }
         }
     }
 
     update(gameFrame) {
         for (const system of this.systems) {
-            system.update(this.componentManager, gameFrame);
+            if (system.phase == undefined || system.phase == this.currentPhase) {
+                system.update(this.componentManager, gameFrame);
+            }
+        }
+
+        if (this.nextPhase) {
+            for (const system of this.systems) {
+                if (this.currentPhase != undefined && system.phase == this.currentPhase) {
+                    system.teardown(this.componentManager);
+                }
+                if (system.phase == this.nextPhase) {
+                    system.startup(this.componentManager);
+                }
+            }
+    
+            this.currentPhase = this.nextPhase;
+            this.nextPhase = undefined;
+        }
+    }
+
+    setPhase(phase) {
+        if (phase != this.currentPhase) {
+            this.nextPhase = phase;
         }
     }
 }

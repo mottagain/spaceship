@@ -3,6 +3,7 @@ A Galaga-like game for fun.
 
 # TODO
 Game over screen
+Title screen
 Scoreboard
 Pixelate font
 Enemy waves system
