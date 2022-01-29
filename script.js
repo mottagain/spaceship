@@ -280,6 +280,13 @@ class AnimationStateComponent extends Component {
 
 class BackgroundComponent extends Component {}
 
+class ChangePhaseComponent extends Component {
+    constructor(entityId, targetPhase) {
+        super(entityId);
+        this.targetPhase = targetPhase;
+    }
+}
+
 class CollidingWithComponent extends Component {
     constructor(entityId, collisions) {
         super(entityId);
@@ -470,6 +477,25 @@ class SystemManager {
     }
 }
 
+class GamePhaseSystem extends System {
+    constructor() {
+        super(undefined);
+        this.currentPhase = undefined;
+    }
+
+    startup(componentManager) {
+        systemManager.setPhase('game');
+    }
+
+    update(componentManager, gameFrame) {
+        
+        const view = componentManager.getView('ChangePhaseComponent');
+        for (const [changePhaseComponent] of view) {
+            setPhase(changePhaseComponent.targetPhase);
+        }
+    }
+}
+
 class RenderCollisionRegionsForDebugSystem extends System {
 
     update(componentManager, gameFrame) {
@@ -540,6 +566,9 @@ class RenderSpritesSystem extends System {
 }
 
 class PlayerSystem extends System {
+    constructor() {
+        super('game');
+    }
 
     startup(componentManager) {
         const entityId = componentManager.createEntity();
@@ -705,6 +734,9 @@ class MovementSystem extends System {
 }
 
 class CollisionDetectionSystem extends System {
+    constructor() {
+        super('game');
+    }
 
     update(componentManager, gameFrame) {
         // Set of previous collisions, key of form [entityId]=>[otherEntityId]
@@ -758,6 +790,9 @@ class CollisionDetectionSystem extends System {
 }
 
 class EnemySystem extends System {
+    constructor() {
+        super('game');
+    }
 
     update(componentManager, gameFrame) {
 
@@ -872,6 +907,9 @@ class EnemySystem extends System {
 }
 
 class LaserSystem extends System {
+    constructor() {
+        super('game');
+    }
 
     update(componentManager, gameFrame) {
 
@@ -932,6 +970,9 @@ class AudioSystem extends System {
 }
 
 class BackgroundSystem extends System {
+    constructor() {
+        super('game');
+    }
 
     startup(componentManager) {
         const bg1 = componentManager.createEntity();
@@ -985,6 +1026,9 @@ class ScoreSystem extends System {
 }
 
 class HudSystem extends System {
+    constructor() {
+        super('game');
+    }
 
     update(componentManager, gameFrame) {
         var score = 0;
@@ -1042,6 +1086,7 @@ let gameFrame = 0;
 
 const componentManager = new ComponentManager();
 const systemManager = new SystemManager(componentManager);
+systemManager.registerSystem(new GamePhaseSystem());
 systemManager.registerSystem(new BackgroundSystem());
 systemManager.registerSystem(new PlayerSystem());
 systemManager.registerSystem(new MovementSystem());
