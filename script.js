@@ -6,6 +6,8 @@ const playerFireCooldownWait = 35;
 const playerRespawnTime = 100;
 const playerSpawnInvulnerabilityTime = 200;
 const enemyFireCooldownWait = 200;
+const enemyPushbackVelocity = 10;
+const enemyPushbackOnHitTime = 20;
 
 
 // Canvas setup
@@ -305,6 +307,15 @@ class EnemyComponent extends Component {
 class ExtraLifeComponent extends Component {    
     constructor(entityId) {
         super(entityId);
+    }
+}
+
+class ImpulseComponent extends Component {
+    constructor(entityId, velocityX, velocityY, frames) {
+        super(entityId);
+        this.velocityX = velocityX;
+        this.velocityY = velocityY;
+        this.frames = frames;
     }
 }
 
@@ -642,9 +653,21 @@ class SpriteAnimateSystem extends System {
 class MovementSystem extends System {
 
     update(componentManager, gameFrame) {
-        const view = componentManager.getView('PositionComponent', 'VelocityComponent');
+        const impulseView = componentManager.getView('PositionComponent', 'ImpulseComponent');
 
-        for (const [positionComponent, velocityComponent] of view) {
+        for (const [positionComponent, impulseComponent] of impulseView) {
+            positionComponent.positionX += impulseComponent.velocityX;
+            positionComponent.positionY += impulseComponent.velocityY;
+
+            impulseComponent.frames--;
+            if (impulseComponent.frames <= 0) {
+                componentManager.removeComponent('ImpulseComponent', impulseComponent.entityId);
+            }
+        }
+
+        const velocityView = componentManager.getView('PositionComponent', 'VelocityComponent');
+
+        for (const [positionComponent, velocityComponent] of velocityView) {
             positionComponent.positionX += velocityComponent.velocityX;
             positionComponent.positionY += velocityComponent.velocityY;
         }
@@ -753,11 +776,24 @@ class EnemySystem extends System {
                 var blowUp = false;
                 if (collision.collisionGroup == 'PlayerLaser') {
                     enemyComponent.health -= 1;
-                    if (enemyComponent.health == 0) {
+                    if (enemyComponent.health == 0) { // Blow up                        
                         blowUp = true;
                         componentManager.addComponents(
                             new ModifyScoreComponent(componentManager.createEntity(), enemyComponent.points),
                         );
+                    }
+                    else { // Apply an impulse to create a bounce back effect
+                        var entity = componentManager.getEntity(enemyComponent.entityId);
+                        var impulseComponent = entity.get('ImpulseComponent');
+                        if (impulseComponent) {
+                            impulseComponent.velocityY -= enemyPushbackVelocity;
+                            impulseComponent.frames += enemyPushbackOnHitTime;
+                        }
+                        else {
+                            componentManager.addComponents(
+                                new ImpulseComponent(enemyComponent.entityId, 0, -velocityComponent.velocityY - enemyPushbackVelocity, enemyPushbackOnHitTime),
+                            );
+                        }
                     }
                 } else if (collision.collisionGroup == 'Player') {
                     blowUp = true;
