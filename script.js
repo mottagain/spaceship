@@ -44,6 +44,9 @@ const inputKeys = {
     s: false,
     d: false,
     q: false,
+    one: false,
+    two: false,
+    five: false,
     space: false,
 }
 
@@ -68,6 +71,15 @@ canvas.addEventListener('keydown', event => {
         case 'q':
         case 'Q':
             inputKeys.q = true;
+            break;
+        case '1':
+            inputKeys.one = true;
+            break;
+        case '2':
+            inputKeys.two = true;
+            break;
+        case '5':
+            inputKeys.five = true;
             break;
         case ' ':
             inputKeys.space = true;
@@ -96,6 +108,15 @@ canvas.addEventListener('keyup', event => {
         case 'q':
         case 'Q':
             inputKeys.q = false;
+            break;
+        case '1':
+            inputKeys.one = false;
+            break;
+        case '2':
+            inputKeys.two = false;
+            break;
+        case '5':
+            inputKeys.five = false;
             break;
         case ' ':
             inputKeys.space = false;
@@ -305,6 +326,13 @@ class CollisionRadiusComponent extends Component {
         super(entityId);
         this.radius = radius;
         this.collisionGroup = collisionGroup;
+    }
+}
+
+class CreditsComponent extends Component {
+    constructor(entityId) {
+        super(entityId);
+        this.credits = 0;
     }
 }
 
@@ -1111,7 +1139,7 @@ class HudSystem extends System {
     showGameOver() {
         ctx.font = '100px "Pixeloid Sans"';
         ctx.fillStyle = 'white';
-        ctx.fillText('Game Over', 150, 700);
+        ctx.fillText('Game Over', 130, 700);
     }
 }
 
@@ -1126,14 +1154,28 @@ class PregameSystem extends System {
             new PositionComponent(entityId, canvas.width / 2, canvas.height / 2),
             new SpriteComponent(entityId, 'StartScreen', 0, canvas.width / 256),
             new AnimationStateComponent(entityId, true, 10),
+            new CreditsComponent(componentManager.createEntity()),
         );
     }
 
     update(componentManager, gameFrame) {
-        if (inputKeys.space || gamepadKeys.a) {
+        if (inputKeys.one || inputKeys.two) {
             componentManager.addComponents(
                 new ChangePhaseComponent(componentManager.createEntity(), 'game'),
             );
+        }
+
+        var view = componentManager.getView('CreditsComponent');
+        var [creditsComponent] = view[0];
+
+        if (inputKeys.five) {
+            creditsComponent.credits++;
+        }
+
+        if (creditsComponent.credits > 0) {
+            ctx.font = '50px "Pixeloid Sans"';
+            ctx.fillStyle = 'white';
+            ctx.fillText('CREDITS: ' + creditsComponent.credits, 240, 1500);
         }
     }
 }
@@ -1144,7 +1186,6 @@ let gameFrame = 0;
 const componentManager = new ComponentManager();
 const systemManager = new SystemManager(componentManager);
 systemManager.registerSystem(new GamePhaseSystem());
-systemManager.registerSystem(new PregameSystem());
 systemManager.registerSystem(new BackgroundSystem());
 systemManager.registerSystem(new PlayerSystem());
 systemManager.registerSystem(new MovementSystem());
@@ -1157,6 +1198,7 @@ systemManager.registerSystem(new RenderSpritesSystem());
 //systemManager.registerSystem(new RenderCollisionRegionsForDebugSystem());
 systemManager.registerSystem(new ScoreSystem());
 systemManager.registerSystem(new HudSystem());
+systemManager.registerSystem(new PregameSystem());
 
 const playerImage = createImage('player.png');
 const backgroundImage = createImage('stars.png');
