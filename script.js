@@ -360,6 +360,14 @@ class ImpulseComponent extends Component {
     }
 }
 
+class KeyboardKeyPressComponent extends Component {
+    constructor(entityId, key) {
+        super(entityId);
+        this.key = key;
+        this.handled = false;
+    }
+}
+
 class LaserComponent extends Component {
     constructor(entityId) {
         super(entityId);
@@ -508,6 +516,49 @@ class SystemManager {
         if (phase != this.currentPhase) {
             this.nextPhase = phase;
         }
+    }
+}
+
+class InputSystem extends System {
+    constructor() {
+        super(undefined);
+    }
+
+    startup(componentManager) {
+        canvas.addEventListener('keydown', (event) => this.keyDownHandler(componentManager, event));
+        canvas.addEventListener('keyup', (event) => this.keyUpHandler(componentManager, event));
+    }
+
+    teardown(componentManager) {
+        canvas.removeEventListener('keyup', (event) => this.keyUpHandler(componentManager, event));
+        canvas.removeEventListener('keydown', (event) => this.keyDownHandler(componentManager, event));
+    }
+
+    keyDownHandler(componentManager, event) {
+        var keyboardKeyPressComponent = this.getKeyPressedComponent(event.key);
+        if (!keyboardKeyPressComponent) {        
+            componentManager.addComponents(
+                new KeyboardKeyPressComponent(componentManager.createEntity(), event.key),
+            );
+        }
+    }
+
+    keyUpHandler(componentManager, event) {
+        var keyboardKeyPressComponent = this.getKeyPressedComponent(event.key);
+        if (keyboardKeyPressComponent) {
+            componentManager.removeEntity(keyboardKeyPressComponent.entityId);
+        }
+    }
+
+    getKeyPressedComponent(key) {
+        const view = componentManager.getView('KeyboardKeyPressComponent');
+        for (const [keyboardKeyPressComponent] of view) {
+            var pressed = keyboardKeyPressComponent.key;
+            if (pressed == key) {
+                return keyboardKeyPressComponent;
+            }
+        }
+        return undefined;
     }
 }
 
@@ -1124,6 +1175,7 @@ class HudSystem extends System {
 
     updateDebugComponentCounts() {
         if (inputKeys.q) {
+            ctx.font = '40px Georgia';
             ctx.fillStyle = 'grey';
             var stats = componentManager.getStats();
             var yOffset = 100;
@@ -1185,6 +1237,7 @@ let gameFrame = 0;
 
 const componentManager = new ComponentManager();
 const systemManager = new SystemManager(componentManager);
+systemManager.registerSystem(new InputSystem());
 systemManager.registerSystem(new GamePhaseSystem());
 systemManager.registerSystem(new BackgroundSystem());
 systemManager.registerSystem(new PlayerSystem());
