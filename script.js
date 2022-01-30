@@ -38,92 +38,6 @@ function createImage(source) {
     return image;
 }
 
-const inputKeys = {
-    w: false,
-    a: false,
-    s: false,
-    d: false,
-    q: false,
-    one: false,
-    two: false,
-    five: false,
-    space: false,
-}
-
-canvas.addEventListener('keydown', event => {
-    switch(event.key) {
-        case 'a':
-        case 'A':
-            inputKeys.a = true;
-            break;
-        case 'd':
-        case 'D':
-            inputKeys.d = true;
-            break;
-        case 's':
-        case 'S':
-            inputKeys.s = true;
-            break;
-        case 'w':
-        case 'W':
-            inputKeys.w = true;
-            break;
-        case 'q':
-        case 'Q':
-            inputKeys.q = true;
-            break;
-        case '1':
-            inputKeys.one = true;
-            break;
-        case '2':
-            inputKeys.two = true;
-            break;
-        case '5':
-            inputKeys.five = true;
-            break;
-        case ' ':
-            inputKeys.space = true;
-            break;
-    }
-});
-
-canvas.addEventListener('keyup', event => {
-    switch(event.key) {
-        case 'a':
-        case 'A':
-            inputKeys.a = false;
-            break;
-        case 'd':
-        case 'D':
-            inputKeys.d = false;
-            break;
-        case 's':
-        case 'S':
-            inputKeys.s = false;
-            break;
-        case 'w':
-        case 'W':
-            inputKeys.w = false;
-            break;
-        case 'q':
-        case 'Q':
-            inputKeys.q = false;
-            break;
-        case '1':
-            inputKeys.one = false;
-            break;
-        case '2':
-            inputKeys.two = false;
-            break;
-        case '5':
-            inputKeys.five = false;
-            break;
-        case ' ':
-            inputKeys.space = false;
-            break;
-    }
-});
-
 const gamepadKeys = {
     left: false,
     right: false,
@@ -454,6 +368,17 @@ class VelocityComponent extends Component {
     }
 }
 
+function getKeyboardKeyPressedComponent(componentManager, key) {
+    const keysDown = new Map();
+    const keyDownView = componentManager.getView('KeyboardKeyPressComponent');
+    for (const [keyboardKeyPressComponent] of keyDownView) {
+        if (keyboardKeyPressComponent.key == key && !keyboardKeyPressComponent.handled) {
+            return keyboardKeyPressComponent;
+        }
+    }
+    return undefined;
+}
+
 
 class System {
     constructor(phase) {
@@ -711,14 +636,22 @@ class PlayerSystem extends System {
             velocityComponent.velocityX = 0;
             velocityComponent.velocityY = 0;
 
+            const keysDown = new Map();
+            const keyDownView = componentManager.getView('KeyboardKeyPressComponent');
+            for (const [keyboardKeyPressComponent] of keyDownView) {
+                if (!keyboardKeyPressComponent.handled) {
+                    keysDown.set(keyboardKeyPressComponent.key, true);
+                }
+            }
+
             // Handle move
-            if ((inputKeys.a || gamepadKeys.left) && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
-            if ((inputKeys.d || gamepadKeys.right) && positionComponent.positionX < canvas.width - 40) velocityComponent.velocityX += pixelsPerFrameKeyboardVelocity;
-            if ((inputKeys.w || gamepadKeys.up) && positionComponent.positionY > 50) velocityComponent.velocityY -= pixelsPerFrameKeyboardVelocity;
-            if ((inputKeys.s || gamepadKeys.down) && positionComponent.positionY < canvas.height - 50) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
+            if ((keysDown.has('a') || gamepadKeys.left) && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
+            if ((keysDown.has('d') || gamepadKeys.right) && positionComponent.positionX < canvas.width - 40) velocityComponent.velocityX += pixelsPerFrameKeyboardVelocity;
+            if ((keysDown.has('w') || gamepadKeys.up) && positionComponent.positionY > 50) velocityComponent.velocityY -= pixelsPerFrameKeyboardVelocity;
+            if ((keysDown.has('s') || gamepadKeys.down) && positionComponent.positionY < canvas.height - 50) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
 
             // Handle fire
-            if ((inputKeys.space || gamepadKeys.a) && playerComponent.fireCooldownTimer == 0) {
+            if ((keysDown.has(' ') || gamepadKeys.a) && playerComponent.fireCooldownTimer == 0) {
 
                 const laserId = componentManager.createEntity();
                 componentManager.addComponents(
@@ -1116,19 +1049,19 @@ class HudSystem extends System {
     }
 
     update(componentManager, gameFrame) {
-        const score = this.getTotalScore();
-        const lives = this.getRemainingLives();
+        const score = this.getTotalScore(componentManager);
+        const lives = this.getRemainingLives(componentManager);
 
-        this.updateExtraLifeGlyphs(lives);
+        this.updateExtraLifeGlyphs(componentManager, lives);
         this.updateHighScore(score);
-        this.updateDebugComponentCounts();
+        this.updateDebugComponentCounts(componentManager);
         
         if (lives == 0) {
             this.showGameOver();
         }
     }
 
-    getTotalScore() {
+    getTotalScore(componentManager) {
         var score = 0;
         const totalScoreView = componentManager.getView('TotalScoreComponent');
         if (totalScoreView.length > 0) {
@@ -1138,7 +1071,7 @@ class HudSystem extends System {
         return score;
     }
 
-    getRemainingLives() {
+    getRemainingLives(componentManager) {
         var lives = 0;
         const livesView = componentManager.getView('PlayerComponent');
         if (livesView.length > 0) {
@@ -1149,7 +1082,7 @@ class HudSystem extends System {
         return lives;
     }
 
-    updateExtraLifeGlyphs(lives) {
+    updateExtraLifeGlyphs(componentManager, lives) {
         const extraLivesView = componentManager.getView('ExtraLifeComponent');
         if (extraLivesView.length != lives) {
             for (var [extraLifeComponent] of extraLivesView) {
@@ -1173,8 +1106,9 @@ class HudSystem extends System {
         ctx.fillText('score: ' + score, 10, 50);
     }
 
-    updateDebugComponentCounts() {
-        if (inputKeys.q) {
+    updateDebugComponentCounts(componentManager) {
+        var keyPressedComponent = getKeyboardKeyPressedComponent(componentManager, 'q');
+        if (keyPressedComponent) {
             ctx.font = '40px Georgia';
             ctx.fillStyle = 'grey';
             var stats = componentManager.getStats();
@@ -1211,7 +1145,10 @@ class PregameSystem extends System {
     }
 
     update(componentManager, gameFrame) {
-        if (inputKeys.one || inputKeys.two) {
+        var onePressedComponent = getKeyboardKeyPressedComponent(componentManager, '1');
+        var twoPressedComponent = getKeyboardKeyPressedComponent(componentManager, '2');
+        
+        if (onePressedComponent || twoPressedComponent) {
             componentManager.addComponents(
                 new ChangePhaseComponent(componentManager.createEntity(), 'game'),
             );
@@ -1220,7 +1157,9 @@ class PregameSystem extends System {
         var view = componentManager.getView('CreditsComponent');
         var [creditsComponent] = view[0];
 
-        if (inputKeys.five) {
+        var keyPressedComponent = getKeyboardKeyPressedComponent(componentManager, '5');
+        if (keyPressedComponent) {
+            keyPressedComponent.handled = true;
             creditsComponent.credits++;
         }
 
