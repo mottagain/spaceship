@@ -508,6 +508,7 @@ class GamePhaseSystem extends System {
         const view = componentManager.getView('ChangePhaseComponent');
         for (const [changePhaseComponent] of view) {
             systemManager.setPhase(changePhaseComponent.targetPhase);
+            componentManager.removeEntity(changePhaseComponent.entityId);
         }
     }
 }
@@ -1026,14 +1027,22 @@ class BackgroundSystem extends System {
     }
 }
 
-class ScoreSystem extends System {
+class ScoreClearSystem extends System {
+    constructor() {
+        super('pregame');
+    }
 
     startup(componentManager) {
+        componentManager.removeAllComponentInstances('TotalScoreComponent');
+
         const entityId = componentManager.createEntity();
         componentManager.addComponents(
             new TotalScoreComponent(entityId, 0)
         );
     }
+}
+
+class ScoreSystem extends System {
 
     update(componentManager, gameFrame) {
         const totalScoreView = componentManager.getView('TotalScoreComponent');
@@ -1049,6 +1058,25 @@ class ScoreSystem extends System {
     }
 }
 
+class DebugHudSystem extends System {
+
+    update (componentManager, gameFrame) {
+        var keyPressedComponent = getKeyboardKeyPressedComponent(componentManager, 'q');
+        if (keyPressedComponent) {
+            ctx.font = '40px Georgia';
+            ctx.fillStyle = 'grey';
+            var stats = componentManager.getStats();
+            var yOffset = 100;
+            if (stats) {
+                for (const [componentName, count] of stats) {
+                    ctx.fillText(componentName + ': ' + count, 10, yOffset);
+                    yOffset += 50;
+                }
+            }
+        }    
+    }
+}
+
 class HudSystem extends System {
     constructor() {
         super('game');
@@ -1060,10 +1088,16 @@ class HudSystem extends System {
 
         this.updateExtraLifeGlyphs(componentManager, lives);
         this.updateHighScore(score);
-        this.updateDebugComponentCounts(componentManager);
         
         if (lives == 0) {
             this.showGameOver();
+
+            var keyPressedComponent = getKeyboardKeyPressedComponent(componentManager, ' ');
+            if (keyPressedComponent) {
+                componentManager.addComponents(
+                    new ChangePhaseComponent(componentManager.createEntity(), 'pregame'),
+                );
+            }
         }
     }
 
@@ -1112,22 +1146,6 @@ class HudSystem extends System {
         ctx.fillText('score: ' + score, 10, 50);
     }
 
-    updateDebugComponentCounts(componentManager) {
-        var keyPressedComponent = getKeyboardKeyPressedComponent(componentManager, 'q');
-        if (keyPressedComponent) {
-            ctx.font = '40px Georgia';
-            ctx.fillStyle = 'grey';
-            var stats = componentManager.getStats();
-            var yOffset = 100;
-            if (stats) {
-                for (const [componentName, count] of stats) {
-                    ctx.fillText(componentName + ': ' + count, 10, yOffset);
-                    yOffset += 50;
-                }
-            }
-        }
-    }
-
     showGameOver() {
         ctx.font = '100px "Pixeloid Sans"';
         ctx.fillStyle = 'white';
@@ -1147,19 +1165,40 @@ class PregameSystem extends System {
             new PositionComponent(entityId, canvas.width / 2, canvas.height / 2),
             new SpriteComponent(entityId, 'StartScreen', 0, canvas.width / 256),
             new AnimationStateComponent(entityId, true, 10),
-            new CreditsComponent(componentManager.createEntity()),
         );
+
+        if (componentManager.getView('CreditsComponent').length == 0) {
+            componentManager.addComponents(
+                new CreditsComponent(componentManager.createEntity()),
+            );
+        }
+    }
+
+    teardown(componentManager) {
+        var [titleScreenComponent] = componentManager.getView('TitleScreenComponent')[0];
+        componentManager.removeEntity(titleScreenComponent.entityId);
     }
 
     update(componentManager, gameFrame) {
         var view = componentManager.getView('CreditsComponent');
         var [creditsComponent] = view[0];
 
+        var enterGame = false;
+
         var onePressedComponent = getKeyboardKeyPressedComponent(componentManager, '1');
-        var twoPressedComponent = getKeyboardKeyPressedComponent(componentManager, '2');
-        
-        if (creditsComponent.credits > 0 && (onePressedComponent || twoPressedComponent)) {
+        if (onePressedComponent) {
+            onePressedComponent.handled = true;
             creditsComponent.credits--;
+            enterGame = true;
+        }
+        var twoPressedComponent = getKeyboardKeyPressedComponent(componentManager, '2');
+        if (twoPressedComponent) {
+            twoPressedComponent.handled = true;
+            creditsComponent.credits -= 2;
+            enterGame = true;
+        }
+
+        if (creditsComponent.credits > 0 && enterGame) {
             componentManager.addComponents(
                 new ChangePhaseComponent(componentManager.createEntity(), 'game'),
             );
@@ -1206,8 +1245,10 @@ systemManager.registerSystem(new SpriteAnimateSystem());
 //systemManager.registerSystem(new AudioSystem());
 systemManager.registerSystem(new RenderSpritesSystem());
 //systemManager.registerSystem(new RenderCollisionRegionsForDebugSystem());
+systemManager.registerSystem(new ScoreClearSystem());
 systemManager.registerSystem(new ScoreSystem());
 systemManager.registerSystem(new HudSystem());
+systemManager.registerSystem(new DebugHudSystem());
 systemManager.registerSystem(new PregameSystem());
 
 const playerImage = createImage('player.png');
