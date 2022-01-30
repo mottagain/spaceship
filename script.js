@@ -265,6 +265,15 @@ class ExtraLifeComponent extends Component {
     }
 }
 
+class GamepadButtonPressComponent extends Component {
+    constructor(entityId, gamepadNum, buttonLabel) {
+        super(entityId);
+        this.gamepadNum = gamepadNum;
+        this.buttonLabel = buttonLabel;
+        this.handled = false;
+    }
+}
+
 class ImpulseComponent extends Component {
     constructor(entityId, velocityX, velocityY, frames) {
         super(entityId);
@@ -450,10 +459,7 @@ class SystemManager {
     }
 }
 
-class InputSystem extends System {
-    constructor() {
-        super(undefined);
-    }
+class KeybaordInputSystem extends System {
 
     startup(componentManager) {
         canvas.addEventListener('keydown', (event) => this.keyDownHandler(componentManager, event));
@@ -493,10 +499,89 @@ class InputSystem extends System {
     }
 }
 
+class GamepadInputSystem extends System {
+
+    update(componentManager) {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads : []);
+
+        for (var i = 0; i < gamepads.length; i++) {
+            const gamepad = gamepads[i];
+            if (gamepad) {
+                for (var j = 0; j < gamepad.buttons.length; j++) {
+                    var button = gamepad.buttons[j];
+                    if (button.pressed) {
+                        this.handleButtonDown(componentManager, i, j);
+                    }
+                    else {
+                        this.handleButtonUp(componentManager, i, j);
+                    }
+                }
+
+                if (gamepad.axes.length > 0) {
+                    var horizontalAxisStick0 = gamepad.axes[0];
+                    if (horizontalAxisStick0 < -.5) {
+                        this.handleButtonDown(componentManager, i, 'left');
+                    }
+                    else {
+                        this.handleButtonUp(componentManager, i, 'left')
+                    }
+
+                    if (horizontalAxisStick0 > .5) {
+                        this.handleButtonDown(componentManager, i, 'right');
+                    }
+                    else {
+                        this.handleButtonUp(componentManager, i, 'right');
+                    }
+                    
+                    var verticalAxisStick0 = gamepad.axes[1];
+                    if (verticalAxisStick0 < -.5) {
+                        this.handleButtonDown(componentManager, i, 'up');
+                    }
+                    else {
+                        this.handleButtonUp(componentManager, i, 'up');
+                    }
+
+                    if (verticalAxisStick0 > .5) {
+                        this.handleButtonDown(componentManager, i, 'down');
+                    }
+                    else {
+                        this.handleButtonUp(componentManager, i, 'down');
+                    }
+                }
+            }
+        }
+    }
+
+    handleButtonDown(componentManager, gamepadNum, buttonLabel) {
+        var gamepadButtonPressComponent = this.getButtonPressedComponent(gamepadNum, buttonLabel);
+        if (!gamepadButtonPressComponent) {        
+            componentManager.addComponents(
+                new GamepadButtonPressComponent(componentManager.createEntity(), gamepadNum, buttonLabel),
+            );
+        }
+    }
+
+    handleButtonUp(componentManager, gamepadNum, buttonLabel) {
+        var gamepadButtonPressComponent = this.getButtonPressedComponent(gamepadNum, buttonLabel);
+        if (gamepadButtonPressComponent) {
+            componentManager.removeEntity(gamepadButtonPressComponent.entityId);
+        }
+    }
+
+    getButtonPressedComponent(gamepadNum, buttonLabel) {
+        const view = componentManager.getView('GamepadButtonPressComponent');
+        for (const [gamepadButtonPressComponent] of view) {
+            if (gamepadButtonPressComponent.gamepadNum == gamepadNum && gamepadButtonPressComponent.buttonLabel == buttonLabel) {
+                return gamepadButtonPressComponent;
+            }
+        }
+        return undefined;
+    }
+}
+
 class GamePhaseSystem extends System {
     constructor() {
         super(undefined);
-        this.currentPhase = undefined;
     }
 
     startup(componentManager) {
@@ -1233,7 +1318,8 @@ let gameFrame = 0;
 
 const componentManager = new ComponentManager();
 const systemManager = new SystemManager(componentManager);
-systemManager.registerSystem(new InputSystem());
+systemManager.registerSystem(new KeybaordInputSystem());
+systemManager.registerSystem(new GamepadInputSystem());
 systemManager.registerSystem(new GamePhaseSystem());
 systemManager.registerSystem(new BackgroundSystem());
 systemManager.registerSystem(new PlayerSystem());
