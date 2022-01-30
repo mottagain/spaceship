@@ -353,6 +353,12 @@ class SpriteComponent extends Component {
     }
 }
 
+class TitleScreenComponent extends Component {
+    constructor(entityId) {
+        super(entityId);
+    }
+}
+
 class TotalScoreComponent extends Component {
     constructor(entityId, totalScore) {
         super(entityId);
@@ -1137,6 +1143,7 @@ class PregameSystem extends System {
     startup(componentManager) {
         const entityId = componentManager.createEntity();
         componentManager.addComponents(
+            new TitleScreenComponent(entityId),
             new PositionComponent(entityId, canvas.width / 2, canvas.height / 2),
             new SpriteComponent(entityId, 'StartScreen', 0, canvas.width / 256),
             new AnimationStateComponent(entityId, true, 10),
@@ -1145,17 +1152,18 @@ class PregameSystem extends System {
     }
 
     update(componentManager, gameFrame) {
+        var view = componentManager.getView('CreditsComponent');
+        var [creditsComponent] = view[0];
+
         var onePressedComponent = getKeyboardKeyPressedComponent(componentManager, '1');
         var twoPressedComponent = getKeyboardKeyPressedComponent(componentManager, '2');
         
-        if (onePressedComponent || twoPressedComponent) {
+        if (creditsComponent.credits > 0 && (onePressedComponent || twoPressedComponent)) {
+            creditsComponent.credits--;
             componentManager.addComponents(
                 new ChangePhaseComponent(componentManager.createEntity(), 'game'),
             );
         }
-
-        var view = componentManager.getView('CreditsComponent');
-        var [creditsComponent] = view[0];
 
         var keyPressedComponent = getKeyboardKeyPressedComponent(componentManager, '5');
         if (keyPressedComponent) {
@@ -1164,6 +1172,16 @@ class PregameSystem extends System {
         }
 
         if (creditsComponent.credits > 0) {
+
+            // Update title screen sprite
+            const [titleScreenComponent, spriteComponent] = componentManager.getView('TitleScreenComponent', 'SpriteComponent')[0];
+            if (creditsComponent.credits == 1) {
+                spriteComponent.spriteSheetName = 'StartScreen1p';
+            }
+            else if (creditsComponent.credits >= 2) {
+                spriteComponent.spriteSheetName = 'StartScreen2p';
+            }
+
             ctx.font = '50px "Pixeloid Sans"';
             ctx.fillStyle = 'white';
             ctx.fillText('CREDITS: ' + creditsComponent.credits, 240, 1500);
@@ -1200,6 +1218,8 @@ const enemy2Image = createImage('enemy2.png');
 const enemy3Image = createImage('enemy3.png');
 const explosionImage = createImage('boom.png');
 const startScreenImage = createImage('startscreen.png');
+const startScreen1pImage = createImage('startscreen1p.png');
+const startScreen2pImage = createImage('startscreen2p.png');
 
 componentManager.addComponents(
     new SpriteSheetComponent(componentManager.createEntity(), 'Player', playerImage, 4, 4, 13, 16, 16),
@@ -1210,6 +1230,8 @@ componentManager.addComponents(
     new SpriteSheetComponent(componentManager.createEntity(), 'Enemy3', enemy3Image, 2, 3, 6, 32, 32),
     new SpriteSheetComponent(componentManager.createEntity(), 'Explosion', explosionImage, 3, 3, 7, 32, 32),
     new SpriteSheetComponent(componentManager.createEntity(), 'StartScreen', startScreenImage, 2, 2, 3, 256, 512),
+    new SpriteSheetComponent(componentManager.createEntity(), 'StartScreen1p', startScreen1pImage, 2, 2, 3, 256, 512),
+    new SpriteSheetComponent(componentManager.createEntity(), 'StartScreen2p', startScreen2pImage, 2, 2, 3, 256, 512),
 );
 
 systemManager.startup(componentManager);
