@@ -226,8 +226,9 @@ class EnemyComponent extends Component {
 }
 
 class ExtraLifeComponent extends Component {    
-    constructor(entityId) {
+    constructor(entityId, playerEntityId) {
         super(entityId);
+        this.playerEntityId = playerEntityId;
     }
 }
 
@@ -679,7 +680,7 @@ class PlayerSystem extends System {
             componentManager.addComponents(
                 new PlayerComponent(entityId),
                 new CollisionRadiusComponent(entityId, 50, 'Player'),
-                new PositionComponent(entityId, playerXOffset + canvas.width / players / 2, canvas.height - 50),
+                new PositionComponent(entityId, playerXOffset + canvas.width / players / 2, canvas.height - 120),
                 new VelocityComponent(entityId, 0, 0),
                 new SpriteComponent(entityId, 'Player', 0, 6, false),
                 new AnimationStateComponent(entityId, true, 8)
@@ -707,9 +708,10 @@ class PlayerSystem extends System {
 
                 if (playerComponent.respawnTimer == 0) {
                     componentManager.addComponents(
-                        new PositionComponent(playerComponent.entityId, canvas.width / 2, canvas.height - 50),
+                        new PositionComponent(playerComponent.entityId, canvas.width / 2, canvas.height - 120),
                     );
-                    playerComponent.invulnerableTimer = playerSpawnInvulnerabilityTime;                }
+                    playerComponent.invulnerableTimer = playerSpawnInvulnerabilityTime;
+                }
             }
             else {
                 if (playerComponent.invulnerableTimer > 0) {
@@ -740,7 +742,7 @@ class PlayerSystem extends System {
             if ((keysDown.has('a') || buttonsDown.has('left')) && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
             if ((keysDown.has('d') || buttonsDown.has('right')) && positionComponent.positionX < canvas.width - 40) velocityComponent.velocityX += pixelsPerFrameKeyboardVelocity;
             if ((keysDown.has('w') || buttonsDown.has('up')) && positionComponent.positionY > 50) velocityComponent.velocityY -= pixelsPerFrameKeyboardVelocity;
-            if ((keysDown.has('s') || buttonsDown.has('down')) && positionComponent.positionY < canvas.height - 50) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
+            if ((keysDown.has('s') || buttonsDown.has('down')) && positionComponent.positionY < canvas.height - 120) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
 
             // Handle fire
             if ((keysDown.has(' ') || buttonsDown.has(0)) && playerComponent.fireCooldownTimer == 0) {
@@ -805,8 +807,10 @@ class PlayerSystem extends System {
         const scoreView = componentManager.getView('ModifyScoreComponent');
         for (const [modifyScoreComponent] of scoreView) {
             const targetPlayerEntityId = modifyScoreComponent.playerEntityId;
-            const targetPlayer = playerMap.get(targetPlayerEntityId);
-            targetPlayer.score += modifyScoreComponent.delta;
+            if (playerMap.has(targetPlayerEntityId)) {
+                const targetPlayer = playerMap.get(targetPlayerEntityId);
+                targetPlayer.score += modifyScoreComponent.delta;
+            }
         }
         componentManager.removeAllComponentInstances('ModifyScoreComponent');
     }
@@ -1156,15 +1160,35 @@ class HudSystem extends System {
     }
 
     update(componentManager, gameFrame) {
-        const [score, lives] = this.getLivesAndScore(componentManager);
 
-        this.updateExtraLifeGlyphs(componentManager, lives);
+        var updateExtraLives = false;
+        var deadPlayerCount = 0;        
 
-        if (lives != 0) {
-            this.updateHighScore(score);
-        } else {
+        var playerNum = 0;
+        const view = componentManager.getView('PlayerComponent');
+        for (const [playerComponent] of view) {
+            const lives = playerComponent.lives;
+            const score = playerComponent.score;
+
+            updateExtraLives ||= this.checkUpdateExtraLifeGlyphs(componentManager, playerComponent);
+
+            if (lives != 0) {
+                this.showHighScore(playerNum, score);
+            } else {
+                deadPlayerCount++;
+            }
+
+            playerNum++;
+        }
+
+        if (updateExtraLives) {
+            this.updateExtraLifeGlyphs(componentManager, view);
+        }
+
+        // If there are as many dead players as there are players, game over.
+        if (deadPlayerCount == view.length) {
             this.showGameOver();
-
+    
             var keyPressedComponent = getKeyboardKeyPressedComponent(componentManager, ' ');
             if (keyPressedComponent) {
                 componentManager.addComponents(
@@ -1174,39 +1198,44 @@ class HudSystem extends System {
         }
     }
 
-    getLivesAndScore(componentManager) {
-        var score = 0, lives = 0;
-        const view = componentManager.getView('PlayerComponent');
-        if (view.length > 0) {
-            const [playerComponent] = view[0];
-            score = playerComponent.score;
-            lives = playerComponent.lives;
+    checkUpdateExtraLifeGlyphs(componentManager, playerComponent) {
+        var sum = 0;
+        const view = componentManager.getView('ExtraLifeComponent');
+        for (const [extraLifeComponent] of view) {
+            if (extraLifeComponent.playerEntityId == playerComponent.entityId) {
+                sum++;
+            }
         }
-        return [score, lives];
+        return sum != playerComponent.lives;
     }
 
-    updateExtraLifeGlyphs(componentManager, lives) {
+    updateExtraLifeGlyphs(componentManager, playerComponentView) {
         const extraLivesView = componentManager.getView('ExtraLifeComponent');
-        if (extraLivesView.length != lives) {
-            for (var [extraLifeComponent] of extraLivesView) {
-                componentManager.removeEntity(extraLifeComponent.entityId);
-            }
+        for (var [extraLifeComponent] of extraLivesView) {
+            componentManager.removeEntity(extraLifeComponent.entityId);
+        }
 
-            for (var i = 0; i < lives; i++) {
+        var playerNum = 0;
+        for (const [playerComponent] of playerComponentView) {
+            var startX = playerNum == 0 ? 40 : 760;
+            var offsetDir = playerNum == 0 ? 1 : -1;
+            for (var i = 0; i < playerComponent.lives; i++) {
                 const entityId = componentManager.createEntity();
                 componentManager.addComponents(
-                    new ExtraLifeComponent(entityId),
-                    new PositionComponent(entityId, 760 - i * 64, 40),
-                    new SpriteComponent(entityId, 'Player', 0, 4, false),
+                    new ExtraLifeComponent(entityId, playerComponent.entityId),
+                    new PositionComponent(entityId, startX + offsetDir * i * 64, 1570),
+                    new SpriteComponent(entityId, 'Player', 0, 3.5, false),
                 );
             }
+            playerNum++;
         }
     }
 
-    updateHighScore(score) {
+    showHighScore(playerNum, score) {
+        var xOffset = playerNum == 0 ? 10 : 550;
         ctx.font = '50px "Pixeloid Sans"';
         ctx.fillStyle = 'white';
-        ctx.fillText('score: ' + score, 10, 50);
+        ctx.fillText('score: ' + score, xOffset, 50);
     }
 
     showGameOver() {
@@ -1252,19 +1281,23 @@ class PregameSystem extends System {
         var onePressedComponent = getKeyboardKeyPressedComponent(componentManager, '1');
         if (onePressedComponent) {
             onePressedComponent.handled = true;
-            creditsComponent.credits--;
-            enterGame = true;
-            players = 1;
+            if (creditsComponent.credits >= 1) {
+                creditsComponent.credits--;
+                enterGame = true;
+                players = 1;
+            }
         }
         var twoPressedComponent = getKeyboardKeyPressedComponent(componentManager, '2');
         if (twoPressedComponent) {
             twoPressedComponent.handled = true;
-            creditsComponent.credits -= 2;
-            enterGame = true;
-            players = 2;
+            if (creditsComponent.credits >= 2) {
+                creditsComponent.credits -= 2;
+                enterGame = true;
+                players = 2;
+            }
         }
 
-        if (creditsComponent.credits > 0 && enterGame) {
+        if (enterGame) {
             componentManager.addComponents(
                 new StartGameComponent(componentManager.createEntity(), players),
                 new ChangePhaseComponent(componentManager.createEntity(), 'game'),
