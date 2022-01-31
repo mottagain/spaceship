@@ -38,53 +38,6 @@ function createImage(source) {
     return image;
 }
 
-const gamepadKeys = {
-    left: false,
-    right: false,
-    up: false,
-    down: false,
-    a: false,
-    b: false,
-}
-
-function pollGamepadState() {
-    var gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads : []);
-    gamepadKeys.left = gamepadKeys.right = gamepadKeys.up = gamepadKeys.down = gamepadKeys.a = gamepadKeys.b = false;
-
-    if (gamepads && gamepads.length > 0) {
-        var gamepad = gamepads[0];
-        if (gamepad) {
-
-            var button0 = gamepad.buttons[0];
-            if (button0) {
-                gamepadKeys.a = button0.pressed;
-            }
-
-            var button1 = gamepad.buttons[1];
-            if (button1) {
-                gamepadKeys.b = button1.pressed;
-            }
-
-            if (gamepad.axes.length > 0) {
-                var horizontalAxisStick0 = gamepad.axes[0];
-                if (horizontalAxisStick0 < -.5) {
-                    gamepadKeys.left = true;
-                }
-                else if (horizontalAxisStick0 > .5) {
-                    gamepadKeys.right = true;
-                }
-                
-                var verticalAxisStick0 = gamepad.axes[1];
-                if (verticalAxisStick0 < -.5) {
-                    gamepadKeys.up = true;
-                }
-                else if (verticalAxisStick0 > .5) {
-                    gamepadKeys.down = true;
-                }
-            }
-        }
-    }
-}
 
 // ECS
 class Component {
@@ -459,7 +412,18 @@ class SystemManager {
     }
 }
 
-class KeybaordInputSystem extends System {
+class KeyboardInputSystem extends System {
+
+    static getKeyPressedMap(componentManager) {
+        const keysDown = new Map();
+        const keyDownView = componentManager.getView('KeyboardKeyPressComponent');
+        for (const [keyboardKeyPressComponent] of keyDownView) {
+            if (!keyboardKeyPressComponent.handled) {
+                keysDown.set(keyboardKeyPressComponent.key, true);
+            }
+        }
+        return keysDown;
+    }
 
     startup(componentManager) {
         canvas.addEventListener('keydown', (event) => this.keyDownHandler(componentManager, event));
@@ -500,6 +464,17 @@ class KeybaordInputSystem extends System {
 }
 
 class GamepadInputSystem extends System {
+
+    static getButtonPressedMap(componentManager, gamepadNum) {
+        const buttonsDown = new Map();
+        const buttonDownView = componentManager.getView('GamepadButtonPressComponent');
+        for (const [gamepadButtonPressComponent] of buttonDownView) {
+            if (!gamepadButtonPressComponent.handled && gamepadButtonPressComponent.gamepadNum == gamepadNum) {
+                buttonsDown.set(gamepadButtonPressComponent.buttonLabel, true);
+            }
+        }
+        return buttonsDown;
+    }
 
     update(componentManager) {
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads : []);
@@ -728,22 +703,17 @@ class PlayerSystem extends System {
             velocityComponent.velocityX = 0;
             velocityComponent.velocityY = 0;
 
-            const keysDown = new Map();
-            const keyDownView = componentManager.getView('KeyboardKeyPressComponent');
-            for (const [keyboardKeyPressComponent] of keyDownView) {
-                if (!keyboardKeyPressComponent.handled) {
-                    keysDown.set(keyboardKeyPressComponent.key, true);
-                }
-            }
+            const keysDown = KeyboardInputSystem.getKeyPressedMap(componentManager);
+            const buttonsDown = GamepadInputSystem.getButtonPressedMap(componentManager, 0);
 
             // Handle move
-            if ((keysDown.has('a') || gamepadKeys.left) && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
-            if ((keysDown.has('d') || gamepadKeys.right) && positionComponent.positionX < canvas.width - 40) velocityComponent.velocityX += pixelsPerFrameKeyboardVelocity;
-            if ((keysDown.has('w') || gamepadKeys.up) && positionComponent.positionY > 50) velocityComponent.velocityY -= pixelsPerFrameKeyboardVelocity;
-            if ((keysDown.has('s') || gamepadKeys.down) && positionComponent.positionY < canvas.height - 50) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
+            if ((keysDown.has('a') || buttonsDown.has('left')) && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
+            if ((keysDown.has('d') || buttonsDown.has('right')) && positionComponent.positionX < canvas.width - 40) velocityComponent.velocityX += pixelsPerFrameKeyboardVelocity;
+            if ((keysDown.has('w') || buttonsDown.has('up')) && positionComponent.positionY > 50) velocityComponent.velocityY -= pixelsPerFrameKeyboardVelocity;
+            if ((keysDown.has('s') || buttonsDown.has('down')) && positionComponent.positionY < canvas.height - 50) velocityComponent.velocityY += pixelsPerFrameKeyboardVelocity;
 
             // Handle fire
-            if ((keysDown.has(' ') || gamepadKeys.a) && playerComponent.fireCooldownTimer == 0) {
+            if ((keysDown.has(' ') || buttonsDown.has(0)) && playerComponent.fireCooldownTimer == 0) {
 
                 const laserId = componentManager.createEntity();
                 componentManager.addComponents(
@@ -1318,7 +1288,7 @@ let gameFrame = 0;
 
 const componentManager = new ComponentManager();
 const systemManager = new SystemManager(componentManager);
-systemManager.registerSystem(new KeybaordInputSystem());
+systemManager.registerSystem(new KeyboardInputSystem());
 systemManager.registerSystem(new GamepadInputSystem());
 systemManager.registerSystem(new GamePhaseSystem());
 systemManager.registerSystem(new BackgroundSystem());
@@ -1368,8 +1338,6 @@ function animate(params) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     systemManager.update(gameFrame);
-
-    pollGamepadState();
 
     gameFrame++;
     requestAnimationFrame(animate);
