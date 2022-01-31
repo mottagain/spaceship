@@ -258,14 +258,16 @@ class KeyboardKeyPressComponent extends Component {
 }
 
 class LaserComponent extends Component {
-    constructor(entityId) {
+    constructor(entityId, sourceEntityId) {
         super(entityId);
+        this.sourceEntityId = sourceEntityId;
     }
 }
 
 class ModifyScoreComponent extends Component {
-    constructor(entityId, delta) {
+    constructor(entityId, playerEntityId, delta) {
         super(entityId);
+        this.playerEntityId = playerEntityId;
         this.delta = delta;
     }
 }
@@ -273,6 +275,7 @@ class ModifyScoreComponent extends Component {
 class PlayerComponent extends Component {
     constructor(entityId) {
         super(entityId);
+        this.score = 0;
         this.lives = 3;
         this.fireCooldownTimer = 0;
         this.respawnTimer = 0;
@@ -338,13 +341,6 @@ class StartGameComponent extends Component {
 class TitleScreenComponent extends Component {
     constructor(entityId) {
         super(entityId);
-    }
-}
-
-class TotalScoreComponent extends Component {
-    constructor(entityId, totalScore) {
-        super(entityId);
-        this.totalScore = totalScore;
     }
 }
 
@@ -697,6 +693,7 @@ class PlayerSystem extends System {
         this.handleSpawn(componentManager);
         this.handleInput(componentManager);
         this.handleCollisions(componentManager);
+        this.updateScore(componentManager);
     }
 
     handleSpawn(componentManager) {
@@ -750,7 +747,7 @@ class PlayerSystem extends System {
 
                 const laserId = componentManager.createEntity();
                 componentManager.addComponents(
-                    new LaserComponent(laserId),
+                    new LaserComponent(laserId, playerComponent.entityId),
                     new PositionComponent(laserId, positionComponent.positionX, positionComponent.positionY - 25),
                     new VelocityComponent(laserId, 0, -20),
                     new SpriteComponent(laserId, 'Laser', 0, 5, false),
@@ -766,7 +763,6 @@ class PlayerSystem extends System {
     }
 
     handleCollisions(componentManager) {
-        let scoreDelta = 0;
         const view = componentManager.getView('PlayerComponent', 'PositionComponent', 'VelocityComponent', 'CollidingWithComponent');
         for (const [playerComponent, positionComponent, velocityComponent, collidingWithComponent] of view) {
 
@@ -797,6 +793,22 @@ class PlayerSystem extends System {
                 }
             }
         }
+    }
+
+    updateScore(componentManager) {
+        var playerMap = new Map();
+        const playerView = componentManager.getView('PlayerComponent');
+        for (const [playerComponent] of playerView) {
+            playerMap.set(playerComponent.entityId, playerComponent);
+        }
+
+        const scoreView = componentManager.getView('ModifyScoreComponent');
+        for (const [modifyScoreComponent] of scoreView) {
+            const targetPlayerEntityId = modifyScoreComponent.playerEntityId;
+            const targetPlayer = playerMap.get(targetPlayerEntityId);
+            targetPlayer.score += modifyScoreComponent.delta;
+        }
+        componentManager.removeAllComponentInstances('ModifyScoreComponent');
     }
 }
 
@@ -955,10 +967,13 @@ class EnemySystem extends System {
                 var blowUp = false;
                 if (collision.collisionGroup == 'PlayerLaser') {
                     enemyComponent.health -= 1;
-                    if (enemyComponent.health == 0) { // Blow up                        
+                    if (enemyComponent.health == 0) { // Blow up
                         blowUp = true;
+                        // Find the laser that hit us so we can trace it back to the player
+                        const laserEntity = componentManager.getEntity(collision.otherEntityId);
+                        const laserComponent = laserEntity.get('LaserComponent');
                         componentManager.addComponents(
-                            new ModifyScoreComponent(componentManager.createEntity(), enemyComponent.points),
+                            new ModifyScoreComponent(componentManager.createEntity(), laserComponent.sourceEntityId, enemyComponent.points),
                         );
                     }
                     else { // Apply an impulse to create a bounce back effect
@@ -1005,7 +1020,7 @@ class EnemySystem extends System {
             if (enemyComponent.fireCooldownTimer == 0) {
                 const laserId = componentManager.createEntity();
                 componentManager.addComponents(
-                    new LaserComponent(laserId),
+                    new LaserComponent(laserId, enemyComponent.entityId),
                     new PositionComponent(laserId, positionComponent.positionX, positionComponent.positionY + 25),
                     new VelocityComponent(laserId, 0, 15),
                     new SpriteComponent(laserId, 'Laser', 0, 5, false),
@@ -1116,37 +1131,6 @@ class BackgroundSystem extends System {
     }
 }
 
-class ScoreClearSystem extends System {
-    constructor() {
-        super('pregame');
-    }
-
-    startup(componentManager) {
-        componentManager.removeAllComponentInstances('TotalScoreComponent');
-
-        const entityId = componentManager.createEntity();
-        componentManager.addComponents(
-            new TotalScoreComponent(entityId, 0)
-        );
-    }
-}
-
-class ScoreSystem extends System {
-
-    update(componentManager, gameFrame) {
-        const totalScoreView = componentManager.getView('TotalScoreComponent');
-        if (totalScoreView.length > 0) {
-            const [totalScoreComponent] = totalScoreView[0];
-
-            const view = componentManager.getView('ModifyScoreComponent');
-            for (const [modifyScoreComponent] of view) {
-                totalScoreComponent.totalScore += modifyScoreComponent.delta;
-            }
-            componentManager.removeAllComponentInstances('ModifyScoreComponent');
-        }
-    }
-}
-
 class DebugHudSystem extends System {
 
     update (componentManager, gameFrame) {
@@ -1172,13 +1156,13 @@ class HudSystem extends System {
     }
 
     update(componentManager, gameFrame) {
-        const score = this.getTotalScore(componentManager);
-        const lives = this.getRemainingLives(componentManager);
+        const [score, lives] = this.getLivesAndScore(componentManager);
 
         this.updateExtraLifeGlyphs(componentManager, lives);
-        this.updateHighScore(score);
-        
-        if (lives == 0) {
+
+        if (lives != 0) {
+            this.updateHighScore(score);
+        } else {
             this.showGameOver();
 
             var keyPressedComponent = getKeyboardKeyPressedComponent(componentManager, ' ');
@@ -1190,25 +1174,15 @@ class HudSystem extends System {
         }
     }
 
-    getTotalScore(componentManager) {
-        var score = 0;
-        const totalScoreView = componentManager.getView('TotalScoreComponent');
-        if (totalScoreView.length > 0) {
-            const [totalScoreComponent] = totalScoreView[0];
-            score = totalScoreComponent.totalScore;
-        }
-        return score;
-    }
-
-    getRemainingLives(componentManager) {
-        var lives = 0;
-        const livesView = componentManager.getView('PlayerComponent');
-        if (livesView.length > 0) {
-            const [playerComponent] = livesView[0];
-
+    getLivesAndScore(componentManager) {
+        var score = 0, lives = 0;
+        const view = componentManager.getView('PlayerComponent');
+        if (view.length > 0) {
+            const [playerComponent] = view[0];
+            score = playerComponent.score;
             lives = playerComponent.lives;
         }
-        return lives;
+        return [score, lives];
     }
 
     updateExtraLifeGlyphs(componentManager, lives) {
@@ -1339,8 +1313,6 @@ systemManager.registerSystem(new SpriteAnimateSystem());
 //systemManager.registerSystem(new AudioSystem());
 systemManager.registerSystem(new RenderSpritesSystem());
 //systemManager.registerSystem(new RenderCollisionRegionsForDebugSystem());
-systemManager.registerSystem(new ScoreClearSystem());
-systemManager.registerSystem(new ScoreSystem());
 systemManager.registerSystem(new HudSystem());
 systemManager.registerSystem(new DebugHudSystem());
 systemManager.registerSystem(new PregameSystem());
