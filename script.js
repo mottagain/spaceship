@@ -54,6 +54,7 @@ class ComponentManager {
     constructor() {
         this.componentEntries = new Map();
         this.nextId = 0;
+        this.componentDeleteQueue = [];
     }
 
     createEntity() {
@@ -99,7 +100,7 @@ class ComponentManager {
         return result;
     }
 
-    // Adds all passed components to the commonent manager (arguments should be component instnaces)
+    // Adds all passed components to the commonent manager (arguments should be component instances)
     addComponents() {
         for (const component of arguments) {
             let components = this.componentEntries.get(component.className());
@@ -116,29 +117,27 @@ class ComponentManager {
     }
 
     removeComponent(componentName, entityId) {
-        const componentArray = this.componentEntries.get(componentName);
-        if (componentArray) {
-            for (let i = componentArray.length - 1; i >= 0; i--) {
-                if (componentArray[i].entityId == entityId) {
-                    componentArray.splice(i, 1);
-                }
-            }
-        }
+        this.componentDeleteQueue.push([componentName, entityId]);
     }
 
     removeEntity(entityId) {
 
-        for (const [key, componentArray] of this.componentEntries.entries()) {
-            for (let i = componentArray.length - 1; i >= 0; i--) {
-                const component = componentArray[i];
-                if (component.entityId == entityId) {
-                    componentArray.splice(i, 1);
-                }
-            }
+        for (const [componentName, componentArray] of this.componentEntries.entries()) {
+            this.componentDeleteQueue.push([componentName, entityId]);
         }
     }
 
     removeAllComponentInstances(componentName) {
+        
+        const componentArray = this.componentEntries.get(componentName);
+        if (componentArray) {
+            for (var i = 0; i < componentArray.length; i++) {
+                this.componentDeleteQueue.push([componentName, componentArray[i].entityId]);
+            }
+        }
+    }
+
+    immediateRemoveAllComponentInstances(componentName) {
         this.componentEntries.set(componentName, []);
     }
 
@@ -148,6 +147,20 @@ class ComponentManager {
             result.push([key, componentArray.length]);
         }
         return result;
+    }
+
+    removeQueuedDeletes() {
+        for (const [componentName, entityId] of this.componentDeleteQueue) {
+            const componentArray = this.componentEntries.get(componentName);
+            if (componentArray) {
+                for (let i = componentArray.length - 1; i >= 0; i--) {
+                    if (componentArray[i].entityId == entityId) {
+                        componentArray.splice(i, 1);
+                    }
+                }
+            }
+        }
+        this.componentDeleteQueue = [];
     }
 }
 
@@ -396,6 +409,8 @@ class SystemManager {
                 system.update(this.componentManager, gameFrame);
             }
         }
+
+        this.componentManager.removeQueuedDeletes();
 
         if (this.nextPhase) {
             for (const system of this.systems) {
@@ -853,7 +868,7 @@ class CollisionDetectionSystem extends System {
         const newCollisions = new Map();
 
         // Update all collisions
-        componentManager.removeAllComponentInstances('CollidingWithComponent');
+        componentManager.immediateRemoveAllComponentInstances('CollidingWithComponent');
 
         const view2 = componentManager.getView('PositionComponent', 'CollisionRadiusComponent');
         for (const [positionComponent, collisionRadiusComponent] of view2) {

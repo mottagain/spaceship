@@ -3,7 +3,6 @@ A Galaga-like game for fun.
 
 # TODO
 * Enable 2p
-  - Seperate controls in PlayerSystem
   - Seperate Scores
   - Seperate Extra lives
 * Scoreboard
