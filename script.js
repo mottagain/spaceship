@@ -315,6 +315,13 @@ class SpriteComponent extends Component {
     }
 }
 
+class StartGameComponent extends Component {
+    constructor(entityId, numberOfPlayers) {
+        super(entityId);
+        this.numberOfPlayers = numberOfPlayers;
+    }
+}
+
 class TitleScreenComponent extends Component {
     constructor(entityId) {
         super(entityId);
@@ -648,15 +655,27 @@ class PlayerSystem extends System {
     }
 
     startup(componentManager) {
-        const entityId = componentManager.createEntity();
-        componentManager.addComponents(
-            new PlayerComponent(entityId),
-            new CollisionRadiusComponent(entityId, 50, 'Player'),
-            new PositionComponent(entityId, canvas.width / 2, canvas.height - 50),
-            new VelocityComponent(entityId, 0, 0),
-            new SpriteComponent(entityId, 'Player', 0, 6, false),
-            new AnimationStateComponent(entityId, true, 8)
-        );
+        const numPlayerQuery = componentManager.getView('StartGameComponent');
+        const [startGameComponent] = numPlayerQuery[0];
+        componentManager.removeAllComponentInstances('StartGameComponent');
+
+        const players = startGameComponent.numberOfPlayers;
+
+        var playerXOffset = 0;
+        for (var i = 0; i < players; i++) {
+
+            const entityId = componentManager.createEntity();
+            componentManager.addComponents(
+                new PlayerComponent(entityId),
+                new CollisionRadiusComponent(entityId, 50, 'Player'),
+                new PositionComponent(entityId, playerXOffset + canvas.width / players / 2, canvas.height - 50),
+                new VelocityComponent(entityId, 0, 0),
+                new SpriteComponent(entityId, 'Player', 0, 6, false),
+                new AnimationStateComponent(entityId, true, 8)
+            );
+
+            playerXOffset += canvas.width / 2;
+        }
     }
 
     update(componentManager, gameFrme) {
@@ -1239,22 +1258,26 @@ class PregameSystem extends System {
         var [creditsComponent] = view[0];
 
         var enterGame = false;
+        var players = 0;
 
         var onePressedComponent = getKeyboardKeyPressedComponent(componentManager, '1');
         if (onePressedComponent) {
             onePressedComponent.handled = true;
             creditsComponent.credits--;
             enterGame = true;
+            players = 1;
         }
         var twoPressedComponent = getKeyboardKeyPressedComponent(componentManager, '2');
         if (twoPressedComponent) {
             twoPressedComponent.handled = true;
             creditsComponent.credits -= 2;
             enterGame = true;
+            players = 2;
         }
 
         if (creditsComponent.credits > 0 && enterGame) {
             componentManager.addComponents(
+                new StartGameComponent(componentManager.createEntity(), players),
                 new ChangePhaseComponent(componentManager.createEntity(), 'game'),
             );
         }

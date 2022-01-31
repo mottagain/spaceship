@@ -2,8 +2,9 @@
 A Galaga-like game for fun.
 
 # TODO
-* Move gamepad input into InputSystem
 * Enable 2p
+  - Seperate controls in PlayerSystem
+  - Seperate Scores
 * Scoreboard
 * Enemy waves system
 * Rotate circle enemy
