@@ -5,6 +5,7 @@ A Galaga-like game for fun.
 * Enable 2p
   - Seperate controls in PlayerSystem
   - Seperate Scores
+  - Seperate Extra lives
 * Scoreboard
 * Enemy waves system
 * Rotate circle enemy

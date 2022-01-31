@@ -714,16 +714,15 @@ class PlayerSystem extends System {
 
     handleInput(componentManager) {
 
-        let view = componentManager.getView('PlayerComponent', 'PositionComponent', 'VelocityComponent');
-        if (view.length > 0) {
-
-            const [playerComponent, positionComponent, velocityComponent] = view[0];
+        const view = componentManager.getView('PlayerComponent', 'PositionComponent', 'VelocityComponent');
+        var index = 0;
+        for (const [playerComponent, positionComponent, velocityComponent] of view) {
 
             velocityComponent.velocityX = 0;
             velocityComponent.velocityY = 0;
 
-            const keysDown = KeyboardInputSystem.getKeyPressedMap(componentManager);
-            const buttonsDown = GamepadInputSystem.getButtonPressedMap(componentManager, 0);
+            const keysDown = index == 0 ? KeyboardInputSystem.getKeyPressedMap(componentManager) : new Map();
+            const buttonsDown = GamepadInputSystem.getButtonPressedMap(componentManager, index);
 
             // Handle move
             if ((keysDown.has('a') || buttonsDown.has('left')) && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
@@ -747,6 +746,7 @@ class PlayerSystem extends System {
             }
 
             if (playerComponent.fireCooldownTimer > 0) playerComponent.fireCooldownTimer--;
+            index++;
         }
     }
 
