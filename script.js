@@ -274,8 +274,9 @@ class ModifyScoreComponent extends Component {
 }
 
 class PlayerComponent extends Component {
-    constructor(entityId) {
+    constructor(entityId, playerNum) {
         super(entityId);
+        this.playerNum = playerNum;
         this.score = 0;
         this.lives = 3;
         this.fireCooldownTimer = 0;
@@ -678,7 +679,7 @@ class PlayerSystem extends System {
 
             const entityId = componentManager.createEntity();
             componentManager.addComponents(
-                new PlayerComponent(entityId),
+                new PlayerComponent(entityId, i),
                 new CollisionRadiusComponent(entityId, 50, 'Player'),
                 new PositionComponent(entityId, playerXOffset + canvas.width / players / 2, canvas.height - 120),
                 new VelocityComponent(entityId, 0, 0),
@@ -700,15 +701,14 @@ class PlayerSystem extends System {
     handleSpawn(componentManager) {
 
         let view = componentManager.getView('PlayerComponent', 'SpriteComponent');
-        if (view.length > 0) {
-            const [playerComponent, spriteComponent] = view[0];
+        for (var [playerComponent, spriteComponent] of view) {
 
             if (playerComponent.respawnTimer > 0) {
                 playerComponent.respawnTimer--;
 
                 if (playerComponent.respawnTimer == 0) {
                     componentManager.addComponents(
-                        new PositionComponent(playerComponent.entityId, canvas.width / 2, canvas.height - 120),
+                        new PositionComponent(playerComponent.entityId, (canvas.width / 2 * playerComponent.playerNum) + canvas.width / view.length / 2, canvas.height - 120),
                     );
                     playerComponent.invulnerableTimer = playerSpawnInvulnerabilityTime;
                 }
@@ -729,14 +729,13 @@ class PlayerSystem extends System {
     handleInput(componentManager) {
 
         const view = componentManager.getView('PlayerComponent', 'PositionComponent', 'VelocityComponent');
-        var index = 0;
         for (const [playerComponent, positionComponent, velocityComponent] of view) {
 
             velocityComponent.velocityX = 0;
             velocityComponent.velocityY = 0;
 
-            const keysDown = index == 0 ? KeyboardInputSystem.getKeyPressedMap(componentManager) : new Map();
-            const buttonsDown = GamepadInputSystem.getButtonPressedMap(componentManager, index);
+            const keysDown = playerComponent.playerNum == 0 ? KeyboardInputSystem.getKeyPressedMap(componentManager) : new Map();
+            const buttonsDown = GamepadInputSystem.getButtonPressedMap(componentManager, playerComponent.playerNum);
 
             // Handle move
             if ((keysDown.has('a') || buttonsDown.has('left')) && positionComponent.positionX > 40) velocityComponent.velocityX -= pixelsPerFrameKeyboardVelocity;
@@ -760,7 +759,6 @@ class PlayerSystem extends System {
             }
 
             if (playerComponent.fireCooldownTimer > 0) playerComponent.fireCooldownTimer--;
-            index++;
         }
     }
 
@@ -1164,7 +1162,6 @@ class HudSystem extends System {
         var updateExtraLives = false;
         var deadPlayerCount = 0;        
 
-        var playerNum = 0;
         const view = componentManager.getView('PlayerComponent');
         for (const [playerComponent] of view) {
             const lives = playerComponent.lives;
@@ -1173,12 +1170,10 @@ class HudSystem extends System {
             updateExtraLives ||= this.checkUpdateExtraLifeGlyphs(componentManager, playerComponent);
 
             if (lives != 0) {
-                this.showHighScore(playerNum, score);
+                this.showHighScore(playerComponent.playerNum, score);
             } else {
                 deadPlayerCount++;
             }
-
-            playerNum++;
         }
 
         if (updateExtraLives) {
@@ -1215,10 +1210,9 @@ class HudSystem extends System {
             componentManager.removeEntity(extraLifeComponent.entityId);
         }
 
-        var playerNum = 0;
         for (const [playerComponent] of playerComponentView) {
-            var startX = playerNum == 0 ? 40 : 760;
-            var offsetDir = playerNum == 0 ? 1 : -1;
+            var startX = playerComponent.playerNum == 0 ? 40 : 760;
+            var offsetDir = playerComponent.playerNum == 0 ? 1 : -1;
             for (var i = 0; i < playerComponent.lives; i++) {
                 const entityId = componentManager.createEntity();
                 componentManager.addComponents(
@@ -1227,15 +1221,14 @@ class HudSystem extends System {
                     new SpriteComponent(entityId, 'Player', 0, 3.5, false),
                 );
             }
-            playerNum++;
         }
     }
 
     showHighScore(playerNum, score) {
-        var xOffset = playerNum == 0 ? 10 : 550;
+        var xOffset = playerNum == 0 ? 10 : 520;
         ctx.font = '50px "Pixeloid Sans"';
         ctx.fillStyle = 'white';
-        ctx.fillText('score: ' + score, xOffset, 50);
+        ctx.fillText('P' + (playerNum + 1) + ': ' + score, xOffset, 50);
     }
 
     showGameOver() {

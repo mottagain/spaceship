@@ -2,10 +2,8 @@
 A Galaga-like game for fun.
 
 # TODO
-* Enable 2p
-  - Bug:  Deaths are not tracked against the correct player
-  - Bug:  Input for player 1 controls player 2 when player 1 is dead
-  - Bug:  The HUD doesn't remember which side a players' score / extra lives belong on.  So when player 1 dies, player 2's stats move to the left.
+* Address issue where score no longer shows when a player dies
+* Need a way to distinguish P1 from P2
 * Scoreboard
 * Enemy waves system
 * Rotate circle enemy
