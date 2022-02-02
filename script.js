@@ -691,6 +691,13 @@ class PlayerSystem extends System {
         }
     }
 
+    teardown(componentManager) {
+        const view = componentManager.getView('PlayerComponent');
+        for (const [playerComponent] of view) {
+            componentManager.removeEntity(playerComponent.entityId);
+        }
+    }
+
     update(componentManager, gameFrme) {
         this.handleSpawn(componentManager);
         this.handleInput(componentManager);
@@ -783,11 +790,11 @@ class PlayerSystem extends System {
 
                         if (playerComponent.lives > 0) {
                             playerComponent.lives--;
-                            playerComponent.respawnTimer = playerRespawnTime;
                             componentManager.removeComponent("PositionComponent", playerComponent.entityId);
-                        }
-                        if (playerComponent.lives == 0) {
-                            componentManager.removeEntity(playerComponent.entityId);
+
+                            if (playerComponent.lives > 0) {
+                                playerComponent.respawnTimer = playerRespawnTime;
+                            }
                         }
                     }
                 }
@@ -1169,9 +1176,9 @@ class HudSystem extends System {
 
             updateExtraLives ||= this.checkUpdateExtraLifeGlyphs(componentManager, playerComponent);
 
-            if (lives != 0) {
-                this.showHighScore(playerComponent.playerNum, score);
-            } else {
+            this.showHighScore(playerComponent.playerNum, score);
+
+            if (lives == 0) {
                 deadPlayerCount++;
             }
         }

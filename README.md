@@ -2,7 +2,6 @@
 A Galaga-like game for fun.
 
 # TODO
-* Address issue where score no longer shows when a player dies
 * Need a way to distinguish P1 from P2
 * Scoreboard
 * Enemy waves system
